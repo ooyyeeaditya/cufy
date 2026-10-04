@@ -196,6 +196,76 @@ input, textarea, select {
     height: 100% !important;
     border-radius: 0 !important;
   }
+
+  .cookie-banner {
+    display: none !important;
+  }
+}
+
+/* Floating Desktop Cookie Consent Banner Styling */
+.cookie-banner {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999;
+  width: 90%;
+  max-width: 480px;
+  background: rgba(24, 24, 27, 0.94);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  padding: 16px 20px;
+  color: #FFFFFF;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
+}
+
+.cookie-text {
+  font-size: 0.84rem;
+  color: #D4D4D8;
+  line-height: 1.4;
+}
+
+.cookie-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.btn-cookie-decline {
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: transparent;
+  color: #A1A1AA;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border: 1px solid #3F3F46;
+  transition: all 0.2s ease;
+}
+
+.btn-cookie-decline:hover {
+  color: #FFFFFF;
+  border-color: #71717A;
+}
+
+.btn-cookie-accept {
+  padding: 8px 18px;
+  border-radius: 12px;
+  background: #FF3B30;
+  color: #FFFFFF;
+  font-size: 0.82rem;
+  font-weight: 800;
+  border: none;
+  box-shadow: 0 4px 12px rgba(255, 59, 48, 0.35);
+  transition: all 0.2s ease;
+}
+
+.btn-cookie-accept:hover {
+  background: #E03131;
 }
 
 /* Dynamic Island & Status Bar */

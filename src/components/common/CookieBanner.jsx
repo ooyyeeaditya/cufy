@@ -5,9 +5,25 @@ export default function CookieBanner() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    // 1. Never show cookie banner inside Standalone PWA App Mode
+    const inStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    if (inStandalone) {
+      localStorage.setItem('cufy_cookie_consent', JSON.stringify({ analytics: true, timestamp: new Date().toISOString() }));
+      setVisible(false);
+      return;
+    }
+
+    // 2. Never show if already accepted/saved in localStorage
     const saved = localStorage.getItem('cufy_cookie_consent');
     if (!saved) {
-      setVisible(true);
+      // Auto-set consent for seamless mobile web experience so it doesn't block onboarding
+      const isMobile = window.innerWidth <= 768;
+      if (isMobile) {
+        localStorage.setItem('cufy_cookie_consent', JSON.stringify({ analytics: true, timestamp: new Date().toISOString() }));
+        setVisible(false);
+      } else {
+        setVisible(true);
+      }
     }
   }, []);
 
@@ -31,7 +47,7 @@ export default function CookieBanner() {
   return (
     <div className="cookie-banner animate-fade-in" role="dialog" aria-label="Cookie Preferences">
       <p className="cookie-text">
-        Cufy uses essential cookies to ensure secure login and minimal privacy-first analytics to improve your intentional matching experience. No tracking across third-party sites.
+        Cufy uses essential cookies for secure authentication and privacy-first matching.
       </p>
       <div className="cookie-actions">
         <button onClick={handleDecline} className="btn-cookie-decline">
