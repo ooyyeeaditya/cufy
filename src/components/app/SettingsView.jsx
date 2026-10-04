@@ -17,12 +17,25 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
     photos: userProfile?.photos || ['https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=80']
   });
 
-  const [profileScore, setProfileScore] = useState(37);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
-  const [isDeactivateOpen, setIsDeactivateOpen] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
-  const [isBoostActive, setIsBoostActive] = useState(false);
+  // Calculate dynamic profile completion percentage based on filled profile fields
+  const calculateProfileScore = (data) => {
+    let score = 0;
+    if (data.name && data.name.trim()) score += 15;
+    if (data.bio && data.bio.trim()) score += 15;
+    if (data.promptAnswer && data.promptAnswer.trim()) score += 15;
+    if (data.city && data.city.trim()) score += 10;
+    if (data.occupation || data.jobTitle) score += 10;
+    if (data.education) score += 10;
+    if (data.religion) score += 5;
+    
+    // Photo scoring (up to 20% max)
+    const validPhotos = (data.photos || []).filter(p => Boolean(p));
+    score += Math.min(20, validPhotos.length * 5);
+
+    return Math.min(100, Math.max(15, score));
+  };
+
+  const currentProfileScore = calculateProfileScore(profileData);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -30,9 +43,10 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
   };
 
   const handleSaveProfile = (updatedData) => {
-    setProfileData({ ...profileData, ...updatedData });
-    setProfileScore(100);
-    showToast('Profile successfully updated! Profile strength now 100%.');
+    const updated = { ...profileData, ...updatedData };
+    setProfileData(updated);
+    const newScore = calculateProfileScore(updated);
+    showToast(`Profile successfully updated! Profile strength now ${newScore}%.`);
   };
 
   const handleBoost = () => {
@@ -142,10 +156,10 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
             <div>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#09090B' }}>
-                {profileScore === 100 ? 'All-Star Profile' : 'Beginner profile'}
+                {currentProfileScore === 100 ? 'All-Star Profile' : 'Profile Strength'}
               </h3>
-              <div style={{ fontSize: '2rem', fontWeight: 900, color: profileScore === 100 ? '#10B981' : '#B91C1C', margin: '4px 0 10px', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-                {profileScore} <span style={{ fontSize: '1.2rem', fontWeight: 700 }}>%</span>
+              <div style={{ fontSize: '2rem', fontWeight: 900, color: currentProfileScore === 100 ? '#10B981' : '#FF3B30', margin: '4px 0 10px', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                {currentProfileScore} <span style={{ fontSize: '1.2rem', fontWeight: 700 }}>%</span>
               </div>
             </div>
 
@@ -159,11 +173,11 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
 
           {/* Progress Bar */}
           <div style={{ width: '100%', height: '6px', background: '#F4F4F5', borderRadius: '3px', overflow: 'hidden', marginBottom: '14px' }}>
-            <div style={{ width: `${profileScore}%`, height: '100%', background: profileScore === 100 ? '#10B981' : '#B91C1C', borderRadius: '3px', transition: 'width 0.4s ease' }}></div>
+            <div style={{ width: `${currentProfileScore}%`, height: '100%', background: currentProfileScore === 100 ? '#10B981' : '#FF3B30', borderRadius: '3px', transition: 'width 0.4s ease' }}></div>
           </div>
 
           <p style={{ fontSize: '0.88rem', color: '#52525B', marginBottom: '18px', lineHeight: '1.4' }}>
-            {profileScore === 100 ? 'Your profile is fully optimized for maximum matches!' : 'By improving your profile, you\'ll attract more Likes.'}
+            {currentProfileScore === 100 ? 'Your profile is fully optimized for maximum matches!' : 'By completing your profile photos, bio, and prompts, you\'ll attract more Likes.'}
           </p>
 
           <button 

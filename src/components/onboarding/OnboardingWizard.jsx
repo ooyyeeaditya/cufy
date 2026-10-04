@@ -11,42 +11,38 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
   const fileInputRef = useRef(null);
   const [activeSlotIdx, setActiveSlotIdx] = useState(null);
 
-  // Onboarding Form State
+  // Onboarding Form State (Cleaned up from hardcoded dummy strings)
   const [formData, setFormData] = useState({
-    phone: '9876543210',
-    otp: '123456',
-    name: initialData?.name || 'aditya',
-    email: 'aditya@example.com',
-    day: '31',
-    month: '01',
-    year: '2004',
-    location: 'Brooklyn, NY',
-    gender: 'Man',
-    pronouns: 'he/him',
+    phone: '',
+    otp: '',
+    name: initialData?.name || '',
+    email: initialData?.email || '',
+    day: '15',
+    month: '06',
+    year: '2002',
+    location: initialData?.location || 'New Delhi',
+    gender: 'Woman',
+    pronouns: 'she/her',
     heightFeet: 5,
     heightInches: 5,
     heightUnit: 'FT',
     ethnicity: ['South Asian'],
-    interestedIn: 'Women',
+    interestedIn: 'Men',
     intent: 'Serious relationship',
-    college: 'Columbia University',
-    degree: 'Computer Science',
-    jobTitle: 'Product Designer',
-    hometown: 'New York, NY',
+    college: '',
+    degree: '',
+    jobTitle: '',
+    hometown: '',
     religion: 'Spiritual',
     drinking: 'Socially',
     smoking: 'Never',
     drugs: 'Never',
-    photos: [
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800&auto=format&fit=crop&q=80',
-      null, null, null, null
-    ],
-    bio: 'Deepen connection with simple steps that bring you closer every single day.',
+    photos: [null, null, null, null, null, null],
+    bio: '',
     prompt1: 'Together, we could...',
-    prompt1Answer: 'explore hidden coffee spots around the city and plan spontaneous weekend getaways.',
+    prompt1Answer: '',
     prompt2: 'I get along best with people who...',
-    prompt2Answer: 'value honest conversations, love music, and enjoy good food without taking life too seriously.',
+    prompt2Answer: '',
     voiceRecorded: false
   });
 
@@ -1298,40 +1294,8 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
                 </div>
               )}
 
-              {/* Boost Packs Options */}
-              <div>
-                <label className="form-label" style={{ marginBottom: '8px' }}>
-                  {formData.gender === 'Woman' ? 'Purchase Profile Boost Packs (Top 24h Visibility)' : 'Or Select Boost Pack (Top 24h Visibility to all girls)'}
-                </label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                  {[
-                    { id: 'boost_149', title: '1 Boost', price: 149 },
-                    { id: 'boost_399', title: '4 Boosts', price: 399 },
-                    { id: 'boost_799', title: '15 Boosts', price: 799 }
-                  ].map((b) => (
-                    <button
-                      key={b.id}
-                      type="button"
-                      onClick={() => setSelectedPlan({ ...b, type: 'boost' })}
-                      style={{
-                        padding: '10px 12px',
-                        borderRadius: '16px',
-                        background: selectedPlan.id === b.id ? '#FFF0F0' : '#FFFFFF',
-                        border: selectedPlan.id === b.id ? '2px solid #FF3B30' : '1.5px solid #E4E4E7',
-                        color: selectedPlan.id === b.id ? '#FF3B30' : '#09090B',
-                        textAlign: 'center',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <div style={{ fontSize: '0.78rem', fontWeight: 800 }}>{b.title}</div>
-                      <div style={{ fontSize: '1.05rem', fontWeight: 900, marginTop: '2px' }}>₹{b.price}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Direct UPI Payment Button (Only if paid) */}
-              {(formData.gender !== 'Woman' || selectedPlan.type === 'boost') && (
+              {/* Direct UPI Payment Button (For Men) */}
+              {formData.gender !== 'Woman' && (
                 <button 
                   type="button"
                   onClick={() => {
