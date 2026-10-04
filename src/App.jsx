@@ -22,6 +22,7 @@ import AdminPanel from './components/app/AdminPanel';
 
 import { INITIAL_DAILY_MATCH } from './data/mockProfiles';
 import { analytics } from './utils/analytics';
+import { Clock, ShieldCheck, Sparkles, RefreshCw, X, LogOut } from 'lucide-react';
 import './styles/index.css';
 
 export default function App() {
@@ -37,6 +38,7 @@ export default function App() {
   // User Session & Onboarding Data
   const [userProfile, setUserProfile] = useState(null);
   const [isFullWidth, setIsFullWidth] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
 
   // Modals state
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
@@ -45,8 +47,8 @@ export default function App() {
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
 
-  // Restore persistent login session from localStorage on app launch
-  useEffect(() => {
+  // Sync user profile state from localStorage
+  const refreshUserSession = () => {
     try {
       const savedUser = localStorage.getItem('cufy_active_user');
       if (savedUser) {
@@ -55,11 +57,24 @@ export default function App() {
         if (parsed?.isAdmin) {
           setIsAdminOpen(true);
         }
-        setViewState('app');
       }
     } catch (err) {
       console.error('Session restore error:', err);
     }
+  };
+
+  // Restore persistent login session from localStorage on app launch & listen for approval events
+  useEffect(() => {
+    refreshUserSession();
+
+    const handleApprovedEvent = () => {
+      refreshUserSession();
+    };
+
+    window.addEventListener('cufy_user_approved', handleApprovedEvent);
+    return () => {
+      window.removeEventListener('cufy_user_approved', handleApprovedEvent);
+    };
   }, []);
 
   useEffect(() => {
@@ -78,6 +93,11 @@ export default function App() {
     localStorage.setItem('cufy_active_user', JSON.stringify(completedData));
     setViewState('app');
     setAppTab('home');
+
+    // Show welcome modal for active approved accounts
+    if (completedData.status === 'approved' || completedData.gender === 'Woman') {
+      setShowWelcomeModal(true);
+    }
   };
 
   // Direct login for existing members
@@ -89,6 +109,10 @@ export default function App() {
     }
     setViewState('app');
     setAppTab('home');
+
+    if (user.gender === 'Woman' || user.status === 'approved') {
+      setShowWelcomeModal(true);
+    }
   };
 
   // View individual profile
@@ -129,6 +153,8 @@ export default function App() {
     setViewState('welcome');
   };
 
+  const isPendingApproval = userProfile && userProfile.gender !== 'Woman' && userProfile.status === 'pending_approval' && !userProfile.isAdmin;
+
   return (
     <div className="app-container">
       
@@ -168,59 +194,182 @@ export default function App() {
           {viewState === 'app' && (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
               
-              {/* Home Tab: Swipeable Profile Deck */}
-              {appTab === 'home' && (
-                <SwipeableHomeFeed 
-                  onOpenChat={handleOpenChat}
-                  onSelectProfile={handleSelectProfile}
-                  onOpenFilters={() => setIsFilterOpen(true)}
-                  onOpenNotifications={() => setIsNotificationOpen(true)}
-                  onOpenSettings={() => handleTabChange('settings')}
-                  onTriggerMatch={handleTriggerMatch}
-                />
+              {/* PENDING ADMIN APPROVAL LOCKED SCREEN (For Men until Admin approves) */}
+              {isPendingApproval ? (
+                <div style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '32px 24px',
+                  textAlign: 'center',
+                  background: '#F5F3EF',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }} className="animate-fade-in">
+                  
+                  {/* Background graphic */}
+                  <div style={{
+                    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundImage: `url('/photos/haikei2 (2).png')`,
+                    backgroundSize: 'cover', opacity: 0.15, pointerEvents: 'none'
+                  }}></div>
+
+                  <div style={{
+                    width: '80px', height: '80px', borderRadius: '24px',
+                    background: '#FEF3C7', color: '#D97706',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    marginBottom: '20px', boxShadow: '0 12px 32px rgba(217,119,6,0.2)'
+                  }}>
+                    <Clock size={40} />
+                  </div>
+
+                  <h1 style={{ fontSize: '1.8rem', fontWeight: 900, color: '#09090B', marginBottom: '8px', letterSpacing: '-0.5px' }}>
+                    Account Pending Approval
+                  </h1>
+
+                  <p style={{ fontSize: '0.92rem', color: '#52525B', lineHeight: '1.5', maxWidth: '300px', marginBottom: '28px', fontWeight: 500 }}>
+                    Hi <b>{userProfile?.name || 'Member'}</b>! Your profile & payment screenshot are under review by Cufy Admin. You will receive a notification as soon as your account is approved.
+                  </p>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', maxWidth: '280px', zIndex: 10 }}>
+                    <button 
+                      onClick={refreshUserSession}
+                      className="btn-primary" 
+                      style={{ padding: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                    >
+                      <RefreshCw size={18} />
+                      Check Approval Status
+                    </button>
+
+                    <button 
+                      onClick={() => setIsAdminOpen(true)} 
+                      className="btn-secondary"
+                      style={{ padding: '12px' }}
+                    >
+                      Open Admin Panel to Approve
+                    </button>
+
+                    <button 
+                      onClick={handleLogout} 
+                      style={{ background: 'transparent', border: 'none', color: '#71717A', fontSize: '0.85rem', fontWeight: 700, marginTop: '8px', cursor: 'pointer' }}
+                    >
+                      Log Out
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* APPROVED ACTIVE APP VIEW */
+                <>
+                  {/* Home Tab: Swipeable Profile Deck */}
+                  {appTab === 'home' && (
+                    <SwipeableHomeFeed 
+                      onOpenChat={handleOpenChat}
+                      onSelectProfile={handleSelectProfile}
+                      onOpenFilters={() => setIsFilterOpen(true)}
+                      onOpenNotifications={() => setIsNotificationOpen(true)}
+                      onOpenSettings={() => handleTabChange('settings')}
+                      onTriggerMatch={handleTriggerMatch}
+                    />
+                  )}
+
+                  {/* Likes Tab: Who Liked You & You Liked */}
+                  {(appTab === 'likes' || appTab === 'explore') && (
+                    <LikesFeed 
+                      onSelectProfile={handleSelectProfile}
+                      onOpenChat={(profile) => handleSendMessageFromMatch(profile)}
+                    />
+                  )}
+
+                  {/* Single Profile Detail View */}
+                  {appTab === 'profile_detail' && (
+                    <ProfileView 
+                      profile={selectedProfile}
+                      onBack={() => setAppTab('home')}
+                      onOpenChat={handleOpenChat}
+                    />
+                  )}
+
+                  {/* Chats Tab: Interactive Messages Log & Single Chat */}
+                  {appTab === 'chat' && (
+                    <ChatDrawer 
+                      matchProfile={activeChatMatch}
+                      onBack={() => handleTabChange('home')}
+                    />
+                  )}
+
+                  {/* Settings Tab */}
+                  {appTab === 'settings' && (
+                    <SettingsView 
+                      userProfile={userProfile}
+                      onOpenPrivacy={() => setIsPrivacyOpen(true)}
+                      onOpenTerms={() => setIsTermsOpen(true)}
+                      onLogout={handleLogout}
+                      onOpenAdmin={() => setIsAdminOpen(true)}
+                    />
+                  )}
+
+                  {/* Bottom Custom Curved Cutout Navigation Bar */}
+                  <BottomNav 
+                    activeTab={appTab}
+                    onChangeTab={handleTabChange}
+                  />
+                </>
               )}
 
-              {/* Likes Tab: Who Liked You & You Liked */}
-              {(appTab === 'likes' || appTab === 'explore') && (
-                <LikesFeed 
-                  onSelectProfile={handleSelectProfile}
-                  onOpenChat={(profile) => handleSendMessageFromMatch(profile)}
-                />
-              )}
+              {/* WELCOME POPUP MODAL (For Women & Approved Members) */}
+              {showWelcomeModal && (
+                <div style={{
+                  position: 'fixed',
+                  top: 0, left: 0, right: 0, bottom: 0,
+                  background: 'rgba(9, 9, 11, 0.75)',
+                  backdropFilter: 'blur(12px)',
+                  zIndex: 1000,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '20px'
+                }}>
+                  <div style={{
+                    background: '#FFFFFF',
+                    borderRadius: '28px',
+                    maxWidth: '360px',
+                    width: '100%',
+                    padding: '28px 24px',
+                    textAlign: 'center',
+                    boxShadow: '0 24px 60px rgba(0,0,0,0.25)',
+                    border: '1.5px solid #E4E4E7'
+                  }} className="animate-fade-in">
+                    <div style={{
+                      width: '64px', height: '64px', borderRadius: '20px',
+                      background: '#ECFDF5', color: '#10B981',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      margin: '0 auto 16px', boxShadow: '0 8px 24px rgba(16,185,129,0.2)'
+                    }}>
+                      <Sparkles size={32} />
+                    </div>
 
-              {/* Single Profile Detail View */}
-              {appTab === 'profile_detail' && (
-                <ProfileView 
-                  profile={selectedProfile}
-                  onBack={() => setAppTab('home')}
-                  onOpenChat={handleOpenChat}
-                />
-              )}
+                    <h3 style={{ fontSize: '1.5rem', fontWeight: 900, color: '#09090B', marginBottom: '8px' }}>
+                      Welcome to Cufy! ✨
+                    </h3>
 
-              {/* Chats Tab: Interactive Messages Log & Single Chat */}
-              {appTab === 'chat' && (
-                <ChatDrawer 
-                  matchProfile={activeChatMatch}
-                  onBack={() => handleTabChange('home')}
-                />
-              )}
+                    <p style={{ fontSize: '0.9rem', color: '#52525B', lineHeight: '1.45', marginBottom: '24px' }}>
+                      {userProfile?.gender === 'Woman' 
+                        ? 'Your profile is active with 100% free VIP access. Enjoy discovering authentic connections!' 
+                        : 'Your account is approved! Explore profiles and start matching now.'}
+                    </p>
 
-              {/* Settings Tab */}
-              {appTab === 'settings' && (
-                <SettingsView 
-                  userProfile={userProfile}
-                  onOpenPrivacy={() => setIsPrivacyOpen(true)}
-                  onOpenTerms={() => setIsTermsOpen(true)}
-                  onLogout={handleLogout}
-                  onOpenAdmin={() => setIsAdminOpen(true)}
-                />
+                    <button 
+                      onClick={() => setShowWelcomeModal(false)} 
+                      className="btn-black-pill"
+                      style={{ width: '100%', padding: '14px' }}
+                    >
+                      Explore Matches Now
+                    </button>
+                  </div>
+                </div>
               )}
-
-              {/* Bottom Custom Curved Cutout Navigation Bar */}
-              <BottomNav 
-                activeTab={appTab}
-                onChangeTab={handleTabChange}
-              />
 
               {/* IT'S A MATCH OVERLAY SCREEN */}
               {matchedProfile && (

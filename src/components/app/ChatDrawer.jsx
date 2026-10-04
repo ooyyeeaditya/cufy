@@ -3,43 +3,18 @@ import { ArrowLeft, Send, ShieldCheck, CheckCheck, Bell, MessageSquare } from 'l
 import { HOME_SWIPE_PROFILES } from '../../data/mockProfiles';
 
 export default function ChatDrawer({ matchProfile, onBack }) {
-  // Chat Logs State
+  // Chat Logs State - Safe initialization without dummy profiles
   const [conversations, setConversations] = useState([
     {
       id: 'cufy_official',
-      name: 'cufy',
+      name: 'Cufy Team',
       photo: '/photos/cufylogo.jpg',
-      lastMessage: 'Welcome aditya! Thanks for joining Cufy.',
+      lastMessage: 'Welcome to Cufy! Explore authentic profiles and connect.',
       time: 'Just now',
       unread: true,
-      badge: 'Your turn',
+      badge: 'Official',
       messages: [
-        { id: 1, sender: 'them', text: 'Welcome aditya! Thanks for joining Cufy.', time: '10:00 AM' }
-      ]
-    },
-    {
-      id: 'priya',
-      name: 'Priya',
-      photo: HOME_SWIPE_PROFILES[0].photos[0],
-      lastMessage: 'Hi there! Saw we both love intentional coffee spots.',
-      time: '10:14 AM',
-      unread: false,
-      badge: 'Your turn',
-      messages: [
-        { id: 1, sender: 'them', text: 'Hi there! Saw we both love intentional coffee spots.', time: '10:14 AM' },
-        { id: 2, sender: 'me', text: 'Hey! Yes, pour-over coffee on Sunday mornings is unbeatable.', time: '10:16 AM' }
-      ]
-    },
-    {
-      id: 'elena',
-      name: 'Elena',
-      photo: HOME_SWIPE_PROFILES[1].photos[0],
-      lastMessage: 'Coffee sounds great! Are you free this weekend?',
-      time: 'Yesterday',
-      unread: false,
-      badge: '',
-      messages: [
-        { id: 1, sender: 'them', text: 'Coffee sounds great! Are you free this weekend?', time: 'Yesterday' }
+        { id: 1, sender: 'them', text: 'Welcome to Cufy! We are excited to have you here.', time: 'Just now' }
       ]
     }
   ]);
@@ -50,24 +25,28 @@ export default function ChatDrawer({ matchProfile, onBack }) {
 
   // Sync prop matchProfile if passed directly
   useEffect(() => {
-    if (matchProfile) {
-      const existing = conversations.find(c => c.name.toLowerCase() === matchProfile.name.toLowerCase());
+    if (matchProfile && matchProfile.name) {
+      const threadId = matchProfile.name.toLowerCase();
+      const existing = conversations.find(c => c.id === threadId);
       if (!existing) {
+        const photoUrl = (matchProfile.photos && matchProfile.photos.length > 0) 
+          ? matchProfile.photos[0] 
+          : '/photos/front1.jpg';
         const newThread = {
-          id: matchProfile.name.toLowerCase(),
+          id: threadId,
           name: matchProfile.name,
-          photo: matchProfile.photos[0],
+          photo: photoUrl,
           lastMessage: `It's a Match! Say hi to ${matchProfile.name}`,
           time: 'Just now',
           unread: true,
-          badge: 'Your turn',
+          badge: 'New Match',
           messages: [
-            { id: 1, sender: 'them', text: `Hey! Excited to connect on Cufy!`, time: 'Just now' }
+            { id: 1, sender: 'them', text: `Hey! Excited to connect with you on Cufy!`, time: 'Just now' }
           ]
         };
         setConversations(prev => [newThread, ...prev]);
       }
-      setActiveThreadId(matchProfile.name.toLowerCase());
+      setActiveThreadId(threadId);
     } else {
       setActiveThreadId(null);
     }

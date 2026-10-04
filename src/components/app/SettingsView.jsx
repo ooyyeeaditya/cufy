@@ -3,6 +3,12 @@ import { ArrowLeft, Edit2, Zap, ShieldCheck, Lock, ChevronRight, CheckCircle2, R
 import EditProfileModal from './EditProfileModal';
 
 export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, onLogout, onOpenAdmin }) {
+  const [toastMessage, setToastMessage] = useState('');
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isBoostActive, setIsBoostActive] = useState(false);
+  const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
+  const [isDeactivateOpen, setIsDeactivateOpen] = useState(false);
+
   const [profileData, setProfileData] = useState({
     name: userProfile?.name || 'Aditya',
     gender: userProfile?.gender || 'Man',
@@ -14,7 +20,7 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
     occupation: userProfile?.occupation || userProfile?.jobTitle || 'Product Designer',
     education: userProfile?.education || 'Bachelor',
     religion: userProfile?.religion || 'Agnostic',
-    photos: userProfile?.photos || ['https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=80']
+    photos: userProfile?.photos || ['/photos/front1.jpg']
   });
 
   // Calculate dynamic profile completion percentage based on filled profile fields
@@ -193,7 +199,7 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
               border: 'none'
             }}
           >
-            {profileScore === 100 ? 'Edit Profile Details' : 'Increase your attractiveness'}
+            {currentProfileScore === 100 ? 'Edit Profile Details' : 'Increase your attractiveness'}
           </button>
         </div>
 

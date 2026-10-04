@@ -164,6 +164,33 @@ export default function AdminPanel({ isOpen, onClose }) {
 
   const handleApprovePayment = (id) => {
     setPendingPayments(prev => prev.map(p => p.id === id ? { ...p, status: 'approved' } : p));
+    
+    // Auto-approve active user session in localStorage
+    try {
+      const savedUser = localStorage.getItem('cufy_active_user');
+      if (savedUser) {
+        const parsed = JSON.parse(savedUser);
+        parsed.status = 'approved';
+        localStorage.setItem('cufy_active_user', JSON.stringify(parsed));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+
+    // Trigger browser native push notification
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification('🎉 Account Approved!', {
+          body: 'Your Cufy VIP account has been approved by Admin! Welcome to Cufy.',
+          icon: '/photos/cufylogo.jpg'
+        });
+      } catch (err) {
+        console.log('Push notification error:', err);
+      }
+    }
+
+    // Notify window event listeners to sync state instantly
+    window.dispatchEvent(new CustomEvent('cufy_user_approved'));
   };
 
   const handleRejectPayment = (id) => {

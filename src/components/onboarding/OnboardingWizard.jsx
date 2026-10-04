@@ -237,7 +237,13 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
       setIsProcessingPayment(false);
       setPaymentSuccess(true);
       setTimeout(() => {
-        onCompleteOnboarding(formData);
+        const isFemale = formData.gender === 'Woman';
+        const completedData = {
+          ...formData,
+          paymentProofUrl,
+          status: isFemale ? 'approved' : 'pending_approval'
+        };
+        onCompleteOnboarding(completedData);
       }, 1000);
     }, 1200);
   };
@@ -1363,7 +1369,7 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
                   className="btn-primary"
                   style={{ width: '100%', padding: '16px' }}
                 >
-                  Pay ₹{selectedPlan.price} via UPI (GPay / PhonePe / Paytm)
+                  Pay ₹{selectedPlan.price} via UPI
                 </button>
               )}
 
@@ -1371,7 +1377,7 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
               {formData.gender === 'Woman' && selectedPlan.type === 'membership' ? (
                 <button 
                   type="button" 
-                  onClick={() => onCompleteOnboarding(formData)} 
+                  onClick={() => onCompleteOnboarding({ ...formData, status: 'approved' })} 
                   className="btn-black-pill" 
                   style={{ width: '100%', padding: '16px' }}
                 >
