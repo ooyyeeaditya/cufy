@@ -150,6 +150,39 @@ export default function AdminPanel({ isOpen, onClose }) {
   const [selectedUserModal, setSelectedUserModal] = useState(null);
   const [selectedScreenshot, setSelectedScreenshot] = useState(null);
 
+  // Sync real registered users from database whenever panel opens
+  React.useEffect(() => {
+    if (!isOpen) return;
+    try {
+      const dbStr = localStorage.getItem('cufy_registered_users');
+      if (dbStr) {
+        const parsedUsers = JSON.parse(dbStr);
+        if (Array.isArray(parsedUsers) && parsedUsers.length > 0) {
+          setUsersList(parsedUsers);
+
+          // Build pending verifications list from real users
+          const pending = parsedUsers.map(u => ({
+            id: `pay_${u.id}`,
+            userId: u.id,
+            userName: u.name,
+            userEmail: u.email,
+            userPhone: u.phone || '+91 9876543210',
+            gender: u.gender || 'Man',
+            planName: u.plan || '1 Month VIP Pass',
+            amount: u.gender === 'Woman' ? '₹0 FREE' : '₹799',
+            type: 'Membership Pass',
+            screenshotUrl: u.paymentProofUrl || u.paymentProof || '/photos/couple1.jpg',
+            timestamp: u.registered || 'Just now',
+            status: u.status === 'approved' ? 'approved' : 'pending'
+          }));
+          setPendingPayments(pending);
+        }
+      }
+    } catch (err) {
+      console.error('Error loading db users in AdminPanel:', err);
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleLogin = (e) => {
@@ -165,8 +198,26 @@ export default function AdminPanel({ isOpen, onClose }) {
   const handleApprovePayment = (id) => {
     setPendingPayments(prev => prev.map(p => p.id === id ? { ...p, status: 'approved' } : p));
     
-    // Auto-approve active user session in localStorage
+    // Find target user ID
+    const targetPay = pendingPayments.find(p => p.id === id);
+    const targetUserId = targetPay ? targetPay.userId : null;
+
     try {
+      // 1. Update in cufy_registered_users database
+      const dbStr = localStorage.getItem('cufy_registered_users');
+      if (dbStr) {
+        let dbUsers = JSON.parse(dbStr);
+        dbUsers = dbUsers.map(u => {
+          if (u.id === targetUserId || (targetPay && u.email === targetPay.userEmail)) {
+            return { ...u, status: 'approved' };
+          }
+          return u;
+        });
+        localStorage.setItem('cufy_registered_users', JSON.stringify(dbUsers));
+        setUsersList(dbUsers);
+      }
+
+      // 2. Update active user session in localStorage
       const savedUser = localStorage.getItem('cufy_active_user');
       if (savedUser) {
         const parsed = JSON.parse(savedUser);

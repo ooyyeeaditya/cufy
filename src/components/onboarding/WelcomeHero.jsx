@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Heart, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { Heart, ShieldCheck, CheckCircle2, AlertTriangle, Lock, LogIn } from 'lucide-react';
 import { validateEmail } from '../../utils/validation';
 import { ENV } from '../../config/env';
 import { supabase } from '../../lib/supabase';
 
 export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
-  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showWarningModal, setShowWarningModal] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showGoogleModal, setShowGoogleModal] = useState(false);
+
+  const [googleEmail, setGoogleEmail] = useState('alex.rivera.google@gmail.com');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -30,32 +34,57 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Google OAuth / SSO Login flow
-  const handleGoogleSignup = async () => {
+  // Google SSO Account Check & Login / Signup Handler
+  const handleGoogleSubmit = (e) => {
+    if (e) e.preventDefault();
     setIsGoogleLoading(true);
-    try {
-      if (supabase && supabase.auth) {
-        await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: { redirectTo: window.location.origin }
-        });
-      }
-    } catch (e) {
-      console.log('OAuth fallback redirecting');
-    } finally {
+
+    const emailToMatch = googleEmail.trim().toLowerCase();
+
+    // Check if Google email matches Admin email
+    if (emailToMatch === 'cupid.livepro@gmail.com' || emailToMatch === 'admin@cufy.app') {
       setIsGoogleLoading(false);
-      onStartOnboarding({ 
-        authType: 'google', 
-        email: 'alex.rivera.google@gmail.com',
-        name: 'Alex Rivera',
-        location: 'New Delhi',
-        age: 24,
+      setShowGoogleModal(false);
+      onLoginSuccess({ email: 'cupid.livepro@gmail.com', name: 'Admin', isAdmin: true });
+      return;
+    }
+
+    // Check database for existing registered user
+    try {
+      const dbStr = localStorage.getItem('cufy_registered_users');
+      const dbUsers = dbStr ? JSON.parse(dbStr) : [];
+      const matchedUser = dbUsers.find(u => u.email && u.email.toLowerCase() === emailToMatch);
+
+      setTimeout(() => {
+        setIsGoogleLoading(false);
+        setShowGoogleModal(false);
+
+        if (matchedUser) {
+          // User exists in database -> Restore session directly
+          onLoginSuccess(matchedUser);
+        } else {
+          // New user -> Start onboarding with prefilled Google info
+          onStartOnboarding({
+            authType: 'google',
+            email: emailToMatch,
+            name: emailToMatch.split('@')[0],
+            authProvider: 'google'
+          });
+        }
+      }, 600);
+    } catch (err) {
+      setIsGoogleLoading(false);
+      setShowGoogleModal(false);
+      onStartOnboarding({
+        authType: 'google',
+        email: emailToMatch,
         authProvider: 'google'
       });
     }
   };
 
-  const handleLoginSubmit = (e) => {
+  // Password Login Submit Handler
+  const handlePasswordLoginSubmit = (e) => {
     e.preventDefault();
     const trimmedEmail = loginEmail.trim().toLowerCase();
     
@@ -65,20 +94,27 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
 
     if (isAppAdmin) {
       setLoginError('');
-      setShowLoginModal(false);
+      setShowPasswordModal(false);
       onLoginSuccess({ email: 'cupid.livepro@gmail.com', name: 'Admin', isAdmin: true });
       return;
     }
 
-    const err = validateEmail(loginEmail);
-    if (err) {
-      setLoginError(err);
-      return;
+    // Check if regular user exists in registered database
+    try {
+      const dbStr = localStorage.getItem('cufy_registered_users');
+      const dbUsers = dbStr ? JSON.parse(dbStr) : [];
+      const matchedUser = dbUsers.find(u => u.email && u.email.toLowerCase() === trimmedEmail);
+      if (matchedUser) {
+        setLoginError('');
+        setShowPasswordModal(false);
+        onLoginSuccess(matchedUser);
+        return;
+      }
+    } catch (err) {
+      console.error(err);
     }
 
-    setLoginError('');
-    setShowLoginModal(false);
-    onLoginSuccess({ email: loginEmail, name: 'Welcome Back Member', isAdmin: false });
+    setLoginError('Password login is reserved for Cufy Team Members only. Regular users please log in using Continue with Google.');
   };
 
   return (
@@ -93,7 +129,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
       background: '#F5F3EF'
     }} className="animate-fade-in">
       
-      {/* SMOOTHLY BLURRING & LOOPING HAIKEI BACKGROUND GRAPHIC LAYER (Every 2 seconds) */}
+      {/* BACKGROUND GRAPHIC LAYER */}
       {haikeiBgs.map((bgUrl, i) => (
         <img 
           key={i}
@@ -124,14 +160,12 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
         position: 'relative',
         paddingTop: '4px'
       }}>
-        {/* Sleek Cufy Typography Title */}
         <div style={{ display: 'flex', alignItems: 'center' }}>
           <span style={{ fontSize: '1.9rem', fontWeight: 900, fontFamily: 'serif', fontStyle: 'italic', color: '#09090B', letterSpacing: '-0.8px' }}>
             cufy<span style={{ color: '#FF3B30', fontStyle: 'normal' }}>.</span>
           </span>
         </div>
 
-        {/* Curated Daily Badge (No star icon) */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -149,7 +183,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
         </div>
       </div>
 
-      {/* HERO VISUAL PHOTO CARD STACK (front1.jpg, front2.jpg, front3.jpg) */}
+      {/* HERO VISUAL PHOTO CARD STACK */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: '1.15fr 0.85fr',
@@ -159,7 +193,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
         position: 'relative',
         zIndex: 5
       }}>
-        {/* Left Tall Photo Card (front1.jpg) */}
+        {/* Left Photo Card */}
         <div style={{
           position: 'relative',
           borderRadius: '26px',
@@ -175,7 +209,6 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
             loading="eager"
           />
           
-          {/* Floating Glass Name Badge */}
           <div style={{
             position: 'absolute',
             bottom: '14px',
@@ -195,7 +228,6 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
             <CheckCircle2 size={13} style={{ color: '#10B981' }} />
           </div>
 
-          {/* Floating Heart Badge */}
           <div style={{
             position: 'absolute',
             top: '12px',
@@ -214,9 +246,8 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
           </div>
         </div>
 
-        {/* Right 2 Photo Cards (front2.jpg & front3.jpg) */}
+        {/* Right 2 Photo Cards */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', height: '330px' }}>
-          {/* Top Right (front2.jpg) */}
           <div style={{
             flex: 1,
             borderRadius: '22px',
@@ -232,7 +263,6 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
             />
           </div>
 
-          {/* Bottom Right (front3.jpg) */}
           <div style={{
             flex: 1,
             borderRadius: '22px',
@@ -283,22 +313,20 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
           }}>
             the right one_
           </span>
-          {/* Curved red accent underline */}
           <svg width="150" height="14" viewBox="0 0 150 14" fill="none" style={{ display: 'block', marginTop: '2px' }}>
             <path d="M2 10 C 45 2, 95 12, 148 4" stroke="#FF3B30" strokeWidth="3.5" strokeLinecap="round" />
           </svg>
         </div>
       </div>
 
-      {/* ACTION BUTTONS (No star icon on Get Started!) */}
+      {/* ACTION BUTTONS */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', zIndex: 5, position: 'relative' }}>
         <button onClick={() => onStartOnboarding({ authType: 'email' })} className="btn-primary">
           <span>Get Started</span>
         </button>
 
         <button 
-          onClick={handleGoogleSignup} 
-          disabled={isGoogleLoading}
+          onClick={() => setShowGoogleModal(true)} 
           className="btn-secondary"
         >
           <svg width="18" height="18" viewBox="0 0 24 24">
@@ -307,18 +335,150 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
             <path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.62z"/>
             <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
           </svg>
-          {isGoogleLoading ? 'Connecting Google Account...' : 'Continue with Google'}
+          <span>Continue with Google</span>
         </button>
 
         <div style={{ textAlign: 'center', marginTop: '4px' }}>
-          <button onClick={() => setShowLoginModal(true)} className="btn-text">
-            Already a member? Log in
+          <button onClick={() => setShowWarningModal(true)} className="btn-text">
+            Already a member? Log in with password
           </button>
         </div>
       </div>
 
-      {/* LOGIN MODAL */}
-      {showLoginModal && (
+      {/* 1. GOOGLE SSO LOGIN / RE-INSTALL RECOVERY MODAL */}
+      {showGoogleModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(9, 9, 11, 0.75)',
+          backdropFilter: 'blur(8px)',
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: '28px',
+            maxWidth: '380px',
+            width: '100%',
+            padding: '28px 24px',
+            boxShadow: '0 24px 60px rgba(0,0,0,0.25)',
+            border: '1px solid rgba(255,255,255,0.8)'
+          }} className="animate-fade-in">
+            <h3 style={{ fontSize: '1.45rem', fontWeight: 900, marginBottom: '6px', color: '#09090B' }}>
+              Continue with Google
+            </h3>
+            <p style={{ fontSize: '0.88rem', color: '#52525B', marginBottom: '20px' }}>
+              Enter your Google email to log into your account or get started.
+            </p>
+
+            <form onSubmit={handleGoogleSubmit}>
+              <div className="form-group" style={{ marginBottom: '20px' }}>
+                <label className="form-label">Google Account Email</label>
+                <input 
+                  type="email" 
+                  value={googleEmail} 
+                  onChange={(e) => setGoogleEmail(e.target.value)} 
+                  placeholder="name@gmail.com" 
+                  className="form-input"
+                  style={{ borderRadius: '16px' }}
+                  required
+                />
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={isGoogleLoading} 
+                className="btn-primary" 
+                style={{ width: '100%', marginBottom: '10px' }}
+              >
+                {isGoogleLoading ? 'Connecting Google SSO...' : 'Log In / Continue'}
+              </button>
+
+              <button 
+                type="button" 
+                onClick={() => setShowGoogleModal(false)} 
+                className="btn-secondary" 
+                style={{ width: '100%' }}
+              >
+                Cancel
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 2. PASSWORD LOGIN WARNING NOTICE MODAL (FOR TEAM / ADMIN ONLY) */}
+      {showWarningModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(9, 9, 11, 0.75)',
+          backdropFilter: 'blur(10px)',
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: '28px',
+            maxWidth: '370px',
+            width: '100%',
+            padding: '28px 24px',
+            textAlign: 'center',
+            boxShadow: '0 24px 60px rgba(0,0,0,0.25)',
+            border: '1.5px solid #E4E4E7'
+          }} className="animate-fade-in">
+            <div style={{
+              width: '64px', height: '64px', borderRadius: '20px',
+              background: '#FEF2F2', color: '#DC2626',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 16px', boxShadow: '0 8px 24px rgba(220,38,38,0.18)'
+            }}>
+              <AlertTriangle size={34} />
+            </div>
+
+            <h3 style={{ fontSize: '1.35rem', fontWeight: 900, color: '#09090B', marginBottom: '8px' }}>
+              Admin & Team Notice
+            </h3>
+
+            <p style={{ fontSize: '0.88rem', color: '#52525B', lineHeight: '1.45', marginBottom: '22px', fontWeight: 500 }}>
+              Password login method is strictly reserved for <b>Cufy Team Members & Admins</b>. Regular members please log in using <b>Continue with Google</b>.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button 
+                onClick={() => {
+                  setShowWarningModal(false);
+                  setShowPasswordModal(true);
+                }} 
+                className="btn-primary" 
+                style={{ width: '100%', padding: '14px' }}
+              >
+                Proceed to Team Password Login
+              </button>
+
+              <button 
+                onClick={() => {
+                  setShowWarningModal(false);
+                  setShowGoogleModal(true);
+                }} 
+                className="btn-secondary" 
+                style={{ width: '100%', padding: '12px' }}
+              >
+                Use Google Login (Members)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. TEAM / ADMIN PASSWORD LOGIN FORM MODAL */}
+      {showPasswordModal && (
         <div style={{
           position: 'fixed',
           top: 0, left: 0, right: 0, bottom: 0,
@@ -339,17 +499,22 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
             boxShadow: '0 24px 60px rgba(0,0,0,0.25)',
             border: '1px solid rgba(255,255,255,0.8)'
           }} className="animate-fade-in">
-            <h3 style={{ fontSize: '1.5rem', fontWeight: 900, marginBottom: '6px' }}>Welcome Back</h3>
-            <p style={{ fontSize: '0.9rem', color: '#52525B', marginBottom: '22px' }}>Enter your registered email address to log in.</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+              <Lock size={20} style={{ color: '#FF3B30' }} />
+              <h3 style={{ fontSize: '1.45rem', fontWeight: 900, color: '#09090B' }}>Team Password Login</h3>
+            </div>
+            <p style={{ fontSize: '0.88rem', color: '#52525B', marginBottom: '22px' }}>
+              Cufy Admin & Authorized Team Portal Login.
+            </p>
 
-            <form onSubmit={handleLoginSubmit}>
+            <form onSubmit={handlePasswordLoginSubmit}>
               <div className="form-group">
                 <label className="form-label">Email Address</label>
                 <input 
                   type="email" 
                   value={loginEmail} 
                   onChange={(e) => setLoginEmail(e.target.value)} 
-                  placeholder="name@example.com" 
+                  placeholder="cupid.livepro@gmail.com" 
                   className={`form-input ${loginError ? 'error' : ''}`}
                   required
                 />
@@ -365,11 +530,11 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
                   className="form-input"
                   required
                 />
-                {loginError && <span className="error-message">{loginError}</span>}
+                {loginError && <span className="error-message" style={{ display: 'block', marginTop: '6px', color: '#FF3B30', fontSize: '0.8rem', fontWeight: 700 }}>{loginError}</span>}
               </div>
 
               <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
-                <button type="button" onClick={() => setShowLoginModal(false)} className="btn-secondary" style={{ flex: 1 }}>
+                <button type="button" onClick={() => setShowPasswordModal(false)} className="btn-secondary" style={{ flex: 1 }}>
                   Cancel
                 </button>
                 <button type="submit" className="btn-primary" style={{ flex: 1 }}>
@@ -380,6 +545,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
           </div>
         </div>
       )}
+
     </div>
   );
 }

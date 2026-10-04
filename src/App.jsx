@@ -47,13 +47,51 @@ export default function App() {
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
 
-  // Sync user profile state from localStorage
+  // Save user profile to persistent registered database in localStorage
+  const saveUserToDatabase = (user) => {
+    if (!user || user.isAdmin) return;
+    try {
+      const dbStr = localStorage.getItem('cufy_registered_users');
+      let dbUsers = dbStr ? JSON.parse(dbStr) : [];
+      const userEmail = (user.email || 'member@cufy.app').toLowerCase();
+      const existingIdx = dbUsers.findIndex(u => u.email && u.email.toLowerCase() === userEmail);
+
+      const record = {
+        id: user.id || `usr_${Date.now()}`,
+        name: user.name || 'Member',
+        age: user.age || 24,
+        gender: user.gender || 'Man',
+        city: user.city || 'Greater Noida',
+        email: userEmail,
+        phone: user.phone || '+91 9876543210',
+        status: user.status || (user.gender === 'Woman' ? 'approved' : 'pending_approval'),
+        plan: user.plan || (user.gender === 'Woman' ? 'Free Pass for Women' : '1 Month VIP Pass'),
+        registered: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+        photos: (user.photos && user.photos.filter(p => Boolean(p)).length > 0) ? user.photos : ['/photos/front1.jpg'],
+        paymentProofUrl: user.paymentProofUrl || user.paymentProof || '/photos/couple1.jpg',
+        matches: user.matches || [],
+        payments: user.payments || [{ plan: user.plan || '1 Month Pass', amount: '₹799', date: 'Today', status: user.status === 'approved' ? 'Approved' : 'Pending', screenshot: user.paymentProofUrl || '/photos/couple1.jpg' }]
+      };
+
+      if (existingIdx >= 0) {
+        dbUsers[existingIdx] = { ...dbUsers[existingIdx], ...record };
+      } else {
+        dbUsers.unshift(record);
+      }
+      localStorage.setItem('cufy_registered_users', JSON.stringify(dbUsers));
+    } catch (err) {
+      console.error('Database save error:', err);
+    }
+  };
+
+  // Sync user profile state from localStorage without forcing logout
   const refreshUserSession = () => {
     try {
       const savedUser = localStorage.getItem('cufy_active_user');
       if (savedUser) {
         const parsed = JSON.parse(savedUser);
         setUserProfile(parsed);
+        setViewState('app'); // PRESERVE LOGGED IN SESSION ON RELOAD / OTA UPDATES
         if (parsed?.isAdmin) {
           setIsAdminOpen(true);
         }
@@ -91,6 +129,7 @@ export default function App() {
   const handleCompleteOnboarding = (completedData) => {
     setUserProfile(completedData);
     localStorage.setItem('cufy_active_user', JSON.stringify(completedData));
+    saveUserToDatabase(completedData);
     setViewState('app');
     setAppTab('home');
 
@@ -104,9 +143,7 @@ export default function App() {
   const handleLoginSuccess = (user) => {
     setUserProfile(user);
     localStorage.setItem('cufy_active_user', JSON.stringify(user));
-    if (user?.isAdmin) {
-      setIsAdminOpen(true);
-    }
+    saveUserToDatabase(user);
     setViewState('app');
     setAppTab('home');
 
@@ -241,14 +278,6 @@ export default function App() {
                     >
                       <RefreshCw size={18} />
                       Check Approval Status
-                    </button>
-
-                    <button 
-                      onClick={() => setIsAdminOpen(true)} 
-                      className="btn-secondary"
-                      style={{ padding: '12px' }}
-                    >
-                      Open Admin Panel to Approve
                     </button>
 
                     <button 
