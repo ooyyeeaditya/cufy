@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Cufy - Just One a Day | Intentional Dating</title>
     <meta name="description" content="Cufy connects you with one meaningful match every single day. Simple, honest, intentional dating without the noise." />
     
@@ -20,9 +20,17 @@
     <meta name="twitter:description" content="Intentional dating made simple. Discover your one curated connection today." />
     <meta name="twitter:image" content="https://images.unsplash.com/photo-1517841905240-472988babdf9?w=1200&h=630&fit=crop&q=80" />
     
+    <!-- PWA Web App Manifest & Native Mobile Tags -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#F5F3EF" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Cufy" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/pwa-192.svg" />
     
     <!-- Google Fonts Preconnect -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -39,10 +47,17 @@
     <link rel="preload" href="/photos/haikei2 (2).png" as="image" fetchpriority="high" />
     <link rel="preload" href="/photos/haikei2 (3).png" as="image" fetchpriority="high" />
 
-    <!-- Enforce HTTPS Script -->
+    <!-- Enforce HTTPS & Register PWA Service Worker -->
     <script>
       if (window.location.protocol === 'http:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
         window.location.href = window.location.href.replace('http:', 'https:');
+      }
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('Cufy PWA Service Worker registered:', reg.scope))
+            .catch(err => console.error('PWA Service Worker registration failed:', err));
+        });
       }
     </script>
   </head>

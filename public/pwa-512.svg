@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="128" fill="#F5F3EF"/>
+  <circle cx="256" cy="256" r="180" fill="#FF3B30"/>
+  <text x="245" y="295" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="900" font-size="180" fill="#FFFFFF" text-anchor="middle">cufy</text>
+  <circle cx="370" cy="290" r="20" fill="#FFFFFF"/>
+</svg>

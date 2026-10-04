@@ -4,6 +4,7 @@ import CookieBanner from './components/common/CookieBanner';
 import PrivacyPolicyModal from './components/common/PrivacyPolicyModal';
 import TermsModal from './components/common/TermsModal';
 import NotFound from './components/common/NotFound';
+import InstallPwaBanner from './components/common/InstallPwaBanner';
 
 import WelcomeHero from './components/onboarding/WelcomeHero';
 import OnboardingWizard from './components/onboarding/OnboardingWizard';
@@ -247,6 +248,9 @@ export default function App() {
 
         </div>
       </main>
+
+      {/* PWA Native App Install Banner */}
+      <InstallPwaBanner />
 
       {/* Cookie Consent Banner */}
       <CookieBanner />
