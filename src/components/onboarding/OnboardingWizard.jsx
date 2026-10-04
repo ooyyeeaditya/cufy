@@ -65,6 +65,53 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
 
+  // Real Geolocation Detection Handler
+  const [isDetectingLocation, setIsDetectingLocation] = useState(false);
+
+  const handleDetectLocation = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser.');
+      return;
+    }
+    setIsDetectingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+          const data = await res.json();
+          const city = data.address?.city || data.address?.town || data.address?.suburb || data.address?.state_district || 'New Delhi';
+          const country = data.address?.country || 'India';
+          setFormData(prev => ({ ...prev, location: `${city}, ${country}` }));
+        } catch (e) {
+          setFormData(prev => ({ ...prev, location: 'New Delhi, India' }));
+        } finally {
+          setIsDetectingLocation(false);
+        }
+      },
+      (error) => {
+        console.error(error);
+        setFormData(prev => ({ ...prev, location: 'New Delhi, India' }));
+        setIsDetectingLocation(false);
+      },
+      { timeout: 10000, enableHighAccuracy: true }
+    );
+  };
+
+  // Real Native Push Notification Permission Popup Handler
+  const handleRequestNotificationPermission = () => {
+    if ('Notification' in window) {
+      Notification.requestPermission().then((permission) => {
+        console.log('Notification permission result:', permission);
+        handleNext();
+      }).catch(() => {
+        handleNext();
+      });
+    } else {
+      handleNext();
+    }
+  };
+
   // Voice Recording 30s Countdown Timer Effect
   useEffect(() => {
     let timerInterval;
@@ -369,19 +416,32 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
         }}
       />
 
-      {/* Header Bar */}
-      <div style={{ position: 'relative', zIndex: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-          <button onClick={handlePrev} style={{ padding: '8px 14px', background: '#FFFFFF', borderRadius: '14px', border: '1.5px solid #E4E4E7', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }} aria-label="Go back">
-            <ArrowLeft size={18} />
+      {/* Compact Top Header Bar */}
+      <div style={{ position: 'relative', zIndex: 10, paddingTop: '2px', marginBottom: '6px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+          <button 
+            onClick={handlePrev} 
+            style={{ 
+              background: 'transparent', 
+              border: 'none', 
+              padding: '4px 0', 
+              color: '#09090B', 
+              display: 'flex', 
+              alignItems: 'center', 
+              cursor: 'pointer' 
+            }} 
+            aria-label="Go back"
+          >
+            <ArrowLeft size={24} strokeWidth={2.5} />
           </button>
+          
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 800, color: '#71717A' }}>
             <span>Step {step} of {totalSteps}</span>
           </div>
         </div>
 
-        {/* Animated Progress Bar */}
-        <div className="progress-bar-container">
+        {/* Animated Progress Bar shifted right under top row */}
+        <div className="progress-bar-container" style={{ marginBottom: '6px', height: '4px' }}>
           <div className="progress-bar-fill" style={{ width: `${(step / totalSteps) * 100}%` }}></div>
         </div>
       </div>
@@ -534,6 +594,15 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
                 <p style={{ fontSize: '0.88rem', color: '#52525B', marginTop: '4px' }}>
                   We send only 1 notification per day when your match is curated. Zero spam.
                 </p>
+                <button 
+                  type="button" 
+                  onClick={handleRequestNotificationPermission} 
+                  className="btn-primary" 
+                  style={{ marginTop: '16px' }}
+                >
+                  <Bell size={18} />
+                  Allow Notifications
+                </button>
               </div>
             </div>
           )}
@@ -552,6 +621,7 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
                     value={formData.location} 
                     onChange={(e) => setFormData({ ...formData, location: e.target.value })} 
                     className="form-input"
+                    placeholder="e.g. New Delhi, India"
                     style={{ paddingRight: '44px' }}
                   />
                   <MapPin size={20} style={{ position: 'absolute', right: '14px', top: '16px', color: '#71717A' }} />
@@ -560,12 +630,13 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
 
               <button 
                 type="button" 
-                onClick={() => setFormData({ ...formData, location: 'Brooklyn, NY' })} 
+                onClick={handleDetectLocation} 
+                disabled={isDetectingLocation}
                 className="btn-secondary"
                 style={{ marginTop: '8px', fontSize: '0.9rem' }}
               >
                 <Zap size={16} style={{ color: '#FF3B30' }} />
-                Detect Current Location
+                {isDetectingLocation ? 'Detecting your city...' : 'Detect Current Location'}
               </button>
             </div>
           )}

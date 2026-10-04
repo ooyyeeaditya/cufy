@@ -45,6 +45,23 @@ export default function App() {
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
 
+  // Restore persistent login session from localStorage on app launch
+  useEffect(() => {
+    try {
+      const savedUser = localStorage.getItem('cufy_active_user');
+      if (savedUser) {
+        const parsed = JSON.parse(savedUser);
+        setUserProfile(parsed);
+        if (parsed?.isAdmin) {
+          setIsAdminOpen(true);
+        }
+        setViewState('app');
+      }
+    } catch (err) {
+      console.error('Session restore error:', err);
+    }
+  }, []);
+
   useEffect(() => {
     analytics.trackPageView(viewState);
   }, [viewState]);
@@ -58,6 +75,7 @@ export default function App() {
   // Handle Onboarding Completion (Post Payment)
   const handleCompleteOnboarding = (completedData) => {
     setUserProfile(completedData);
+    localStorage.setItem('cufy_active_user', JSON.stringify(completedData));
     setViewState('app');
     setAppTab('home');
   };
@@ -65,6 +83,7 @@ export default function App() {
   // Direct login for existing members
   const handleLoginSuccess = (user) => {
     setUserProfile(user);
+    localStorage.setItem('cufy_active_user', JSON.stringify(user));
     if (user?.isAdmin) {
       setIsAdminOpen(true);
     }
@@ -106,6 +125,7 @@ export default function App() {
 
   const handleLogout = () => {
     setUserProfile(null);
+    localStorage.removeItem('cufy_active_user');
     setViewState('welcome');
   };
 
