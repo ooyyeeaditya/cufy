@@ -1,11 +1,14 @@
 // Cufy Native PWA Ultra-Fast Cache Service Worker
-const CACHE_NAME = 'cufy-cache-v2';
+const CACHE_NAME = 'cufy-cache-v3';
 
 const CRITICAL_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/favicon.svg',
+  '/favicon.png',
+  '/pwa-192.png',
+  '/pwa-512.png',
+  '/apple-touch-icon.png',
   '/photos/cufylogo.jpg',
   '/photos/front1.jpg',
   '/photos/front2.jpg',

@@ -331,6 +331,9 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
     <div style={{
       position: 'relative',
       height: '100%',
+      minHeight: '100%',
+      flex: 1,
+      backgroundColor: '#F5F3EF',
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'space-between',
@@ -372,8 +375,7 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
           <button onClick={handlePrev} style={{ padding: '8px 14px', background: '#FFFFFF', borderRadius: '14px', border: '1.5px solid #E4E4E7', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }} aria-label="Go back">
             <ArrowLeft size={18} />
           </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 800, color: '#71717A' }}>
-            <img src="/photos/cufylogo.jpg" alt="cufy logo" style={{ height: '22px', borderRadius: '5px', objectFit: 'contain' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 800, color: '#71717A' }}>
             <span>Step {step} of {totalSteps}</span>
           </div>
         </div>

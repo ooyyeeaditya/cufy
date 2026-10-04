@@ -4,12 +4,9 @@ import { Smartphone, Monitor, ShieldCheck, FileText } from 'lucide-react';
 export default function DeviceFrameToggle({ isFullWidth, onToggleWidth, onOpenPrivacy, onOpenTerms, onOpenAdmin }) {
   return (
     <div className="global-topbar">
-      <div className="brand-badge" style={{ display: 'flex', alignItems: 'center' }}>
-        <img 
-          src="/photos/cufylogo.jpg" 
-          alt="cufy logo" 
-          style={{ height: '24px', borderRadius: '6px', objectFit: 'contain' }} 
-        />
+      <div className="brand-badge">
+        <div className="brand-dot"></div>
+        <span>cufy</span>
       </div>
 
       <div className="topbar-actions">
