@@ -450,43 +450,28 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
       <div style={{ flex: 1, position: 'relative', zIndex: 10, overflowY: 'auto', padding: '0 4px 12px', display: 'flex', flexDirection: 'column' }}>
         <div key={step} className="step-glide-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
         
-          {/* STEP 1: Phone Number & Verification */}
+          {/* STEP 1: Phone Number */}
           {step === 1 && (
             <div>
               <h1 className="editorial-title">Can we get your number?</h1>
               <p className="editorial-subtitle">Cufy uses your phone number to verify authentic members.</p>
 
-              <div className="form-group">
+              <div className="form-group" style={{ marginTop: '16px' }}>
                 <label className="form-label">Phone Number</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <input type="text" defaultValue="+1" style={{ width: '70px' }} className="form-input" readOnly />
+                  <input 
+                    type="text" 
+                    defaultValue="+91" 
+                    style={{ width: '75px', textAlign: 'center', fontWeight: 800 }} 
+                    className="form-input" 
+                  />
                   <input 
                     type="tel" 
                     value={formData.phone} 
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })} 
+                    placeholder="98765 43210"
                     className="form-input"
                   />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">6-Digit Verification Code</label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <input 
-                    type="text" 
-                    value={formData.otp} 
-                    onChange={(e) => setFormData({ ...formData, otp: e.target.value })} 
-                    className="form-input"
-                    placeholder="123456"
-                  />
-                  <button 
-                    type="button"
-                    onClick={() => setOtpVerified(true)}
-                    className="btn-secondary"
-                    style={{ width: 'auto', padding: '12px 18px', fontSize: '0.85rem' }}
-                  >
-                    {otpVerified ? 'Verified' : 'Verify'}
-                  </button>
                 </div>
               </div>
             </div>
