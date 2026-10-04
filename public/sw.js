@@ -1,7 +1,7 @@
-// Cufy Native PWA Ultra-Fast Cache Service Worker
-const CACHE_NAME = 'cufy-cache-v3';
+// Cufy Native PWA Over-The-Air (OTA) Instant Live Update Service Worker
+const CACHE_NAME = 'cufy-cache-v4';
 
-const CRITICAL_ASSETS = [
+const STATIC_PRECACHE = [
   '/',
   '/index.html',
   '/manifest.json',
@@ -9,23 +9,12 @@ const CRITICAL_ASSETS = [
   '/pwa-192.png',
   '/pwa-512.png',
   '/apple-touch-icon.png',
-  '/photos/cufylogo.jpg',
-  '/photos/front1.jpg',
-  '/photos/front2.jpg',
-  '/photos/front3.jpg',
-  '/photos/couple1.jpg',
-  '/photos/couple2.jpg',
-  '/photos/couple3.jpg',
-  '/photos/haikei2 (1).png',
-  '/photos/haikei2 (2).png',
-  '/photos/haikei2 (3).png'
+  '/photos/cufylogo.jpg'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(CRITICAL_ASSETS);
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_PRECACHE))
   );
   self.skipWaiting();
 });
@@ -36,6 +25,7 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         cacheNames.map((cache) => {
           if (cache !== CACHE_NAME) {
+            console.log('[SW] Clearing old cache version:', cache);
             return caches.delete(cache);
           }
         })
@@ -45,35 +35,55 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Cache-First strategy for images & static assets for 0ms instant loading
+// Skip waiting signal from client
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
+// Smart Network-First & Stale-While-Revalidate Strategy for Instant OTA Updates
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
 
-  // Instant Cache-First for photos & static assets
-  if (url.pathname.startsWith('/photos/') || url.pathname.endsWith('.jpg') || url.pathname.endsWith('.png') || url.pathname.endsWith('.svg') || url.pathname.endsWith('.css') || url.pathname.endsWith('.js')) {
+  // 1. Never cache sw.js or manifest.json in SW cache
+  if (url.pathname === '/sw.js' || url.pathname === '/manifest.json') {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  // 2. Network-First strategy for HTML / index.html (Ensures newest deployment is served on every app launch)
+  if (event.request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
     event.respondWith(
-      caches.match(event.request).then((cachedResponse) => {
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-        return fetch(event.request).then((networkResponse) => {
+      fetch(event.request)
+        .then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             const responseToCache = networkResponse.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
           }
           return networkResponse;
-        });
-      })
+        })
+        .catch(() => {
+          // If offline, serve cached version
+          return caches.match(event.request);
+        })
     );
     return;
   }
 
-  // Network-first with cache fallback for HTML / routes
+  // 3. Stale-While-Revalidate for JS, CSS, and Images (Instant 0ms load + background update)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      return cachedResponse || fetch(event.request);
+      const fetchPromise = fetch(event.request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse.clone()));
+        }
+        return networkResponse;
+      }).catch(() => {});
+
+      return cachedResponse || fetchPromise;
     })
   );
 });

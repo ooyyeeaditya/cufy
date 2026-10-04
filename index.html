@@ -49,7 +49,7 @@
     <link rel="preload" href="/photos/haikei2 (2).png" as="image" fetchpriority="high" />
     <link rel="preload" href="/photos/haikei2 (3).png" as="image" fetchpriority="high" />
 
-    <!-- Enforce HTTPS & Register PWA Service Worker -->
+    <!-- Enforce HTTPS & Register PWA OTA Auto-Update Service Worker -->
     <script>
       if (window.location.protocol === 'http:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
         window.location.href = window.location.href.replace('http:', 'https:');
@@ -57,8 +57,35 @@
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js')
-            .then(reg => console.log('Cufy PWA Service Worker registered:', reg.scope))
+            .then(reg => {
+              console.log('Cufy PWA Service Worker registered:', reg.scope);
+              
+              // Check for updates on load & every 60 seconds
+              reg.update();
+              setInterval(() => reg.update(), 60000);
+
+              reg.onupdatefound = () => {
+                const installingWorker = reg.installing;
+                if (installingWorker) {
+                  installingWorker.onstatechange = () => {
+                    if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      console.log('[OTA] New deployment detected! Auto-activating...');
+                      installingWorker.postMessage({ type: 'SKIP_WAITING' });
+                      window.location.reload();
+                    }
+                  };
+                }
+              };
+            })
             .catch(err => console.error('PWA Service Worker registration failed:', err));
+
+          let refreshing = false;
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!refreshing) {
+              refreshing = true;
+              window.location.reload();
+            }
+          });
         });
       }
     </script>
