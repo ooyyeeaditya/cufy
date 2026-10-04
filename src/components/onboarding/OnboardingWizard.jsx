@@ -372,7 +372,8 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
           <button onClick={handlePrev} style={{ padding: '8px 14px', background: '#FFFFFF', borderRadius: '14px', border: '1.5px solid #E4E4E7', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }} aria-label="Go back">
             <ArrowLeft size={18} />
           </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 800, color: '#71717A' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 800, color: '#71717A' }}>
+            <img src="/photos/cufylogo.jpg" alt="cufy logo" style={{ height: '22px', borderRadius: '5px', objectFit: 'contain' }} />
             <span>Step {step} of {totalSteps}</span>
           </div>
         </div>
@@ -384,8 +385,8 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
       </div>
 
       {/* Question Body Scroll Container with Key-driven Smooth Step Glide Wrapper */}
-      <div style={{ flex: 1, position: 'relative', zIndex: 10, overflowY: 'auto', padding: '0 4px 16px' }}>
-        <div key={step} className="step-glide-wrapper">
+      <div style={{ flex: 1, position: 'relative', zIndex: 10, overflowY: 'auto', padding: '0 4px 12px', display: 'flex', flexDirection: 'column' }}>
+        <div key={step} className="step-glide-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
         
           {/* STEP 1: Phone Number & Verification */}
           {step === 1 && (

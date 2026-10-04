@@ -76,11 +76,19 @@ export default function SwipeableHomeFeed({
         zIndex: 50,
         position: 'relative'
       }}>
-        {/* Left: Original Cufy Brand Typography Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span style={{ fontSize: '1.9rem', fontWeight: 900, fontFamily: 'serif', fontStyle: 'italic', color: '#09090B', letterSpacing: '-1.2px' }}>
-            cufy<span style={{ color: '#FF3B30', fontStyle: 'normal' }}>.</span>
-          </span>
+        {/* Left: Official Cufy Logo Photo Badge */}
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <img 
+            src="/photos/cufylogo.jpg" 
+            alt="cufy logo" 
+            style={{ 
+              height: '34px', 
+              borderRadius: '8px', 
+              objectFit: 'contain',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+            }} 
+            loading="eager"
+          />
         </div>
 
         {/* Right: Action Buttons (Sliders + Bell + CIRCULAR DP!) */}
