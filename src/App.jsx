@@ -90,12 +90,17 @@ export default function App() {
       const savedUser = localStorage.getItem('cufy_active_user');
       if (savedUser) {
         const parsed = JSON.parse(savedUser);
-        setUserProfile(parsed);
-        if (parsed?.isAdmin) {
+        if (parsed && parsed.isAdmin) {
+          setUserProfile(parsed);
           setViewState('admin');
           setIsAdminOpen(true);
-        } else {
+        } else if (parsed) {
+          setUserProfile(parsed);
           setViewState('app');
+          setIsAdminOpen(false);
+        } else {
+          setUserProfile(null);
+          setViewState('welcome');
           setIsAdminOpen(false);
         }
       } else {
@@ -112,7 +117,6 @@ export default function App() {
     }
   };
 
-
   // Restore persistent login session from localStorage on app launch & listen for approval events
   useEffect(() => {
     refreshUserSession();
@@ -126,6 +130,7 @@ export default function App() {
       window.removeEventListener('cufy_user_approved', handleApprovedEvent);
     };
   }, []);
+
 
   useEffect(() => {
     analytics.trackPageView(viewState);

@@ -1,21 +1,7 @@
 // Cufy Native PWA Over-The-Air (OTA) Instant Live Update Service Worker
-const CACHE_NAME = 'cufy-cache-v5';
-
-const STATIC_PRECACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/favicon.png',
-  '/pwa-192.png',
-  '/pwa-512.png',
-  '/apple-touch-icon.png',
-  '/photos/cufylogo.jpg'
-];
+const CACHE_NAME = 'cufy-cache-v6';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_PRECACHE))
-  );
   self.skipWaiting();
 });
 
@@ -42,49 +28,37 @@ self.addEventListener('message', (event) => {
   }
 });
 
-// Smart Network-First & Stale-While-Revalidate Strategy for Instant OTA Updates
+// Smart Network-First Strategy for HTML, JS and Navigation (Always serves newest Vercel deployment)
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
-
   const url = new URL(event.request.url);
 
-  // 1. Never cache sw.js or manifest.json in SW cache
-  if (url.pathname === '/sw.js' || url.pathname === '/manifest.json') {
-    event.respondWith(fetch(event.request));
-    return;
-  }
-
-  // 2. Network-First strategy for HTML and JS bundles (Ensures newest code deployment is served immediately)
-  if (event.request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html') || url.pathname.endsWith('.js')) {
+  // 1. Always fetch fresh JS, HTML, SW, and API requests directly from network
+  if (
+    event.request.mode === 'navigate' || 
+    url.pathname.endsWith('.html') || 
+    url.pathname.endsWith('.js') || 
+    url.pathname === '/' ||
+    url.pathname === '/sw.js'
+  ) {
     event.respondWith(
-      fetch(event.request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
-          }
-          return networkResponse;
-        })
-        .catch(() => {
-          // If offline, serve cached version
-          return caches.match(event.request);
-        })
+      fetch(event.request).catch(() => caches.match(event.request))
     );
     return;
   }
 
-  // 3. Stale-While-Revalidate for CSS and Images (Instant 0ms load + background update)
+  // 2. Stale-While-Revalidate only for static image assets
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      const fetchPromise = fetch(event.request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200) {
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse.clone()));
+    caches.match(event.request).then((cached) => {
+      const networkFetch = fetch(event.request).then((res) => {
+        if (res && res.status === 200) {
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, res.clone()));
         }
-        return networkResponse;
+        return res;
       }).catch(() => {});
-
-      return cachedResponse || fetchPromise;
+      return cached || networkFetch;
     })
   );
 });
+
 
