@@ -22,7 +22,9 @@ import AdminPanel from './components/app/AdminPanel';
 
 import { INITIAL_DAILY_MATCH } from './data/mockProfiles';
 import { analytics } from './utils/analytics';
+import { syncUserToCloud } from './lib/cloudSync';
 import { Clock, ShieldCheck, Sparkles, RefreshCw, X, LogOut } from 'lucide-react';
+
 import './styles/index.css';
 
 export default function App() {
@@ -47,7 +49,7 @@ export default function App() {
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
 
-  // Save user profile to persistent registered database in localStorage
+  // Save user profile to persistent registered database & Cloud DB
   const saveUserToDatabase = (user) => {
     if (!user || user.isAdmin) return;
     try {
@@ -79,10 +81,14 @@ export default function App() {
         dbUsers.unshift(record);
       }
       localStorage.setItem('cufy_registered_users', JSON.stringify(dbUsers));
+
+      // Sync user registration to cloud database for multi-device admin access
+      syncUserToCloud(record);
     } catch (err) {
       console.error('Database save error:', err);
     }
   };
+
 
   // Sync user profile state from localStorage without forcing logout
   const refreshUserSession = () => {

@@ -454,7 +454,8 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
 
       {/* Question Body Scroll Container with Key-driven Smooth Step Glide Wrapper */}
       <div style={{ flex: 1, position: 'relative', zIndex: 10, overflowY: 'auto', padding: '0 4px 12px', display: 'flex', flexDirection: 'column' }}>
-        <div key={step} className="step-glide-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        <form key={step} onSubmit={(e) => { e.preventDefault(); handleNext(); }} className="step-glide-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+
         
           {/* STEP 1: Phone Number */}
           {step === 1 && (
@@ -1447,17 +1448,18 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
             </div>
           )}
 
-        </div>
+        </form>
       </div>
 
       {/* Black Rounded Action Button ALWAYS Anchored Cleanly at Bottom */}
       {step < 19 && (
         <div style={{ position: 'relative', zIndex: 10, paddingTop: '12px', marginTop: 'auto' }}>
-          <button onClick={handleNext} className="btn-black-pill">
+          <button type="button" onClick={handleNext} className="btn-black-pill">
             <span>Continue</span>
           </button>
         </div>
       )}
+
 
       {/* HINGE AGE CONFIRMATION BOTTOM SHEET POPUP (PROPER SOLID WHITE CARD!) */}
       {showAgePopup && (

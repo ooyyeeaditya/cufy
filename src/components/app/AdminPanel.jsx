@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { ShieldCheck, CheckCircle2, XCircle, Users, Heart, CreditCard, LogOut, ChevronRight, Eye, UserX, AlertCircle, RefreshCw, Phone, Mail, MapPin, Sparkles, Camera, Zap, Check, X } from 'lucide-react';
 import { ENV } from '../../config/env';
+import { fetchAllCloudUsers, updateCloudUserStatus } from '../../lib/cloudSync';
 
-export default function AdminPanel({ isOpen, onClose, userProfile }) {
+export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSuccess, onLogout }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [email, setEmail] = useState(ENV.ADMIN_EMAIL || 'cupid.livepro@gmail.com');
   const [password, setPassword] = useState('');
@@ -28,17 +29,17 @@ export default function AdminPanel({ isOpen, onClose, userProfile }) {
     }
   }, [isOpen, userProfile]);
 
-  // Sync real registered users from database whenever panel opens or authenticates
+  // Sync real registered users from cloud & local database whenever panel opens or authenticates
+
   React.useEffect(() => {
     if (!isOpen) {
       if (!userProfile?.isAdmin) setIsAuthenticated(false);
       return;
     }
 
-    try {
-      const dbStr = localStorage.getItem('cufy_registered_users');
-      if (dbStr) {
-        const parsedUsers = JSON.parse(dbStr);
+    const loadUsers = async () => {
+      try {
+        const parsedUsers = await fetchAllCloudUsers();
         if (Array.isArray(parsedUsers)) {
           setUsersList(parsedUsers);
 
@@ -59,13 +60,15 @@ export default function AdminPanel({ isOpen, onClose, userProfile }) {
           }));
           setPendingPayments(pending);
         }
-      } else {
-        setUsersList([]);
-        setPendingPayments([]);
+      } catch (err) {
+        console.error('Error loading db users in AdminPanel:', err);
       }
-    } catch (err) {
-      console.error('Error loading db users in AdminPanel:', err);
-    }
+    };
+
+    loadUsers();
+    const pollInterval = setInterval(loadUsers, 4000); // 4s Real-Time Multi-Device Polling Loop
+
+    return () => clearInterval(pollInterval);
   }, [isOpen, isAuthenticated, userProfile]);
 
   if (!isOpen) return null;
@@ -81,40 +84,25 @@ export default function AdminPanel({ isOpen, onClose, userProfile }) {
     if (isMatch) {
       setIsAuthenticated(true);
       setLoginError('');
+      if (onLoginSuccess) {
+        onLoginSuccess({ email: 'cupid.livepro@gmail.com', name: 'Admin', isAdmin: true });
+      }
     } else {
       setLoginError('Invalid credentials. Check email and password.');
     }
   };
 
-  const handleApprovePayment = (id) => {
+  const handleApprovePayment = async (id) => {
     setPendingPayments(prev => prev.map(p => p.id === id ? { ...p, status: 'approved' } : p));
     
-    // Find target user ID
+    // Find target user
     const targetPay = pendingPayments.find(p => p.id === id);
     const targetUserId = targetPay ? targetPay.userId : null;
+    const targetEmail = targetPay ? targetPay.userEmail : null;
 
     try {
-      // 1. Update in cufy_registered_users database
-      const dbStr = localStorage.getItem('cufy_registered_users');
-      if (dbStr) {
-        let dbUsers = JSON.parse(dbStr);
-        dbUsers = dbUsers.map(u => {
-          if (u.id === targetUserId || (targetPay && u.email === targetPay.userEmail)) {
-            return { ...u, status: 'approved' };
-          }
-          return u;
-        });
-        localStorage.setItem('cufy_registered_users', JSON.stringify(dbUsers));
-        setUsersList(dbUsers);
-      }
-
-      // 2. Update active user session in localStorage
-      const savedUser = localStorage.getItem('cufy_active_user');
-      if (savedUser) {
-        const parsed = JSON.parse(savedUser);
-        parsed.status = 'approved';
-        localStorage.setItem('cufy_active_user', JSON.stringify(parsed));
-      }
+      await updateCloudUserStatus(targetUserId, targetEmail, 'approved');
+      setUsersList(prev => prev.map(u => u.id === targetUserId || u.email === targetEmail ? { ...u, status: 'approved' } : u));
     } catch (e) {
       console.error(e);
     }
@@ -134,6 +122,7 @@ export default function AdminPanel({ isOpen, onClose, userProfile }) {
     // Notify window event listeners to sync state instantly
     window.dispatchEvent(new CustomEvent('cufy_user_approved'));
   };
+
 
   const handleRejectPayment = (id) => {
     setPendingPayments(prev => prev.map(p => p.id === id ? { ...p, status: 'rejected' } : p));

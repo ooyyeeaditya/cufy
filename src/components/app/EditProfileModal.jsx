@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronLeft, X, Lock, Camera, Trash2, Plus, Mic, Play, Pause, Check } from 'lucide-react';
+import VoiceRecorderWidget from '../common/VoiceRecorderWidget';
 
 export default function EditProfileModal({ isOpen, onClose, userProfile, onSave }) {
   if (!isOpen) return null;
@@ -300,63 +301,18 @@ export default function EditProfileModal({ isOpen, onClose, userProfile, onSave 
             Voice Intro Note
           </h3>
 
-          <div style={{
-            background: '#FFFFFF',
-            borderRadius: '24px',
-            padding: '20px 24px',
-            border: '1.5px solid #E4E4E7',
-            boxShadow: '0 6px 20px rgba(0,0,0,0.03)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '14px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <button 
-                  type="button"
-                  onClick={() => setIsPlayingVoice(!isPlayingVoice)}
-                  style={{
-                    width: '44px',
-                    height: '44px',
-                    borderRadius: '50%',
-                    background: '#FF3B30',
-                    color: '#FFFFFF',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 4px 14px rgba(255, 59, 48, 0.3)'
-                  }}
-                >
-                  {isPlayingVoice ? <Pause size={20} fill="#FFFFFF" /> : <Play size={20} fill="#FFFFFF" style={{ marginLeft: '2px' }} />}
-                </button>
-
-                <div>
-                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#09090B' }}>Voice Intro ({voiceDuration})</div>
-                  <div style={{ fontSize: '0.78rem', color: '#71717A', fontWeight: 600 }}>Active on profile</div>
-                </div>
-              </div>
-
-              <button 
-                type="button"
-                onClick={() => setVoiceDuration('0:15')}
-                style={{
-                  padding: '8px 14px',
-                  background: '#F4F4F5',
-                  borderRadius: '12px',
-                  fontSize: '0.8rem',
-                  fontWeight: 800,
-                  color: '#09090B',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <Mic size={14} style={{ color: '#FF3B30' }} />
-                Re-record
-              </button>
-            </div>
-          </div>
+          <VoiceRecorderWidget 
+            initialAudioUrl={userProfile?.voiceNoteUrl}
+            initialDuration={userProfile?.voiceDuration || '0:00'}
+            onSave={({ audioUrl, duration }) => {
+              setVoiceDuration(duration);
+              if (onSave) {
+                onSave({ voiceNoteUrl: audioUrl, voiceDuration: duration });
+              }
+            }}
+          />
         </div>
+
 
         {/* SECTION 6: PERSONAL ATTRIBUTES */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
