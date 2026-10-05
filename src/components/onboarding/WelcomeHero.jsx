@@ -34,18 +34,21 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Google SSO Account Check & Login / Signup Handler
-  const handleGoogleSubmit = (e) => {
-    if (e) e.preventDefault();
-    setIsGoogleLoading(true);
+  const [showCustomEmailInput, setShowCustomEmailInput] = useState(false);
 
-    const emailToMatch = googleEmail.trim().toLowerCase();
+  // Google SSO Account Chooser Select & Login Handler
+  const handleSelectGoogleAccount = (selectedEmail) => {
+    setIsGoogleLoading(true);
+    const emailToMatch = selectedEmail.trim().toLowerCase();
 
     // Check if Google email matches Admin email
     if (emailToMatch === 'cupid.livepro@gmail.com' || emailToMatch === 'admin@cufy.app') {
-      setIsGoogleLoading(false);
-      setShowGoogleModal(false);
-      onLoginSuccess({ email: 'cupid.livepro@gmail.com', name: 'Admin', isAdmin: true });
+      setTimeout(() => {
+        setIsGoogleLoading(false);
+        setShowGoogleModal(false);
+        setShowCustomEmailInput(false);
+        onLoginSuccess({ email: 'cupid.livepro@gmail.com', name: 'Admin', isAdmin: true });
+      }, 400);
       return;
     }
 
@@ -58,6 +61,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
       setTimeout(() => {
         setIsGoogleLoading(false);
         setShowGoogleModal(false);
+        setShowCustomEmailInput(false);
 
         if (matchedUser) {
           // User exists in database -> Restore session directly
@@ -71,10 +75,11 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
             authProvider: 'google'
           });
         }
-      }, 600);
+      }, 500);
     } catch (err) {
       setIsGoogleLoading(false);
       setShowGoogleModal(false);
+      setShowCustomEmailInput(false);
       onStartOnboarding({
         authType: 'google',
         email: emailToMatch,
@@ -82,6 +87,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
       });
     }
   };
+
 
   // Password Login Submit Handler
   const handlePasswordLoginSubmit = (e) => {
@@ -345,13 +351,13 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
         </div>
       </div>
 
-      {/* 1. GOOGLE SSO LOGIN / RE-INSTALL RECOVERY MODAL */}
+      {/* 1. GOOGLE SSO LOGIN ACCOUNT CHOOSER MODAL */}
       {showGoogleModal && (
         <div style={{
           position: 'fixed',
           top: 0, left: 0, right: 0, bottom: 0,
           backgroundColor: 'rgba(9, 9, 11, 0.75)',
-          backdropFilter: 'blur(8px)',
+          backdropFilter: 'blur(10px)',
           zIndex: 1000,
           display: 'flex',
           alignItems: 'center',
@@ -365,50 +371,131 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess }) {
             width: '100%',
             padding: '28px 24px',
             boxShadow: '0 24px 60px rgba(0,0,0,0.25)',
-            border: '1px solid rgba(255,255,255,0.8)'
+            border: '1.5px solid #E4E4E7'
           }} className="animate-fade-in">
-            <h3 style={{ fontSize: '1.45rem', fontWeight: 900, marginBottom: '6px', color: '#09090B' }}>
-              Continue with Google
-            </h3>
-            <p style={{ fontSize: '0.88rem', color: '#52525B', marginBottom: '20px' }}>
-              Enter your Google email to log into your account or get started.
+            
+            {/* Google Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+              <svg width="26" height="26" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.62z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+              </svg>
+              <div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#09090B', margin: 0 }}>
+                  Choose an account
+                </h3>
+                <p style={{ fontSize: '0.78rem', color: '#71717A', margin: 0, fontWeight: 600 }}>
+                  to continue to <b style={{ color: '#09090B' }}>Cufy</b>
+                </p>
+              </div>
+            </div>
+
+            {/* List of Selectable Google Accounts */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
+              {[
+                { name: 'Aditya Chauhan', email: 'aditya.cufy@gmail.com', avatar: 'A', bg: '#4F46E5' },
+                { name: 'Alex Rivera', email: 'alex.rivera.google@gmail.com', avatar: 'AR', bg: '#059669' },
+                { name: 'Cufy Admin', email: 'cupid.livepro@gmail.com', avatar: 'C', bg: '#DC2626', badge: 'Admin' }
+              ].map((acc) => (
+                <div 
+                  key={acc.email}
+                  onClick={() => handleSelectGoogleAccount(acc.email)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '12px 14px',
+                    borderRadius: '16px',
+                    background: '#F9F8F6',
+                    border: '1.5px solid #E4E4E7',
+                    cursor: 'pointer',
+                    transition: 'transform 0.2s var(--ease-spring)'
+                  }}
+                >
+                  <div style={{
+                    width: '38px', height: '38px', borderRadius: '50%',
+                    background: acc.bg, color: '#FFFFFF',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontWeight: 900, fontSize: '0.88rem', flexShrink: 0
+                  }}>
+                    {acc.avatar}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#09090B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{acc.name}</span>
+                      {acc.badge && <span style={{ fontSize: '0.65rem', fontWeight: 900, background: '#09090B', color: '#FFF', padding: '1px 6px', borderRadius: '6px' }}>{acc.badge}</span>}
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: '#71717A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {acc.email}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Custom Email Input Option */}
+              {!showCustomEmailInput ? (
+                <button
+                  type="button"
+                  onClick={() => setShowCustomEmailInput(true)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '12px 14px',
+                    borderRadius: '16px',
+                    background: '#FFFFFF',
+                    border: '1.5px dashed #A1A1AA',
+                    color: '#09090B',
+                    fontWeight: 800,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#F4F4F5', color: '#09090B', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>
+                    +
+                  </div>
+                  <span>Use another account</span>
+                </button>
+              ) : (
+                <form onSubmit={(e) => { e.preventDefault(); handleSelectGoogleAccount(googleEmail); }} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Enter Email Address</label>
+                    <input 
+                      type="email" 
+                      value={googleEmail} 
+                      onChange={(e) => setGoogleEmail(e.target.value)} 
+                      placeholder="your.name@gmail.com" 
+                      className="form-input"
+                      style={{ borderRadius: '14px' }}
+                      required
+                      autoFocus
+                    />
+                  </div>
+                  <button type="submit" disabled={isGoogleLoading} className="btn-primary" style={{ width: '100%', padding: '12px' }}>
+                    {isGoogleLoading ? 'Connecting...' : 'Continue with this Email'}
+                  </button>
+                </form>
+              )}
+            </div>
+
+            <p style={{ fontSize: '0.72rem', color: '#71717A', lineHeight: '1.35', marginBottom: '16px', textAlign: 'center' }}>
+              To continue, Google will share your name, email address, and language preference with Cufy.
             </p>
 
-            <form onSubmit={handleGoogleSubmit}>
-              <div className="form-group" style={{ marginBottom: '20px' }}>
-                <label className="form-label">Google Account Email</label>
-                <input 
-                  type="email" 
-                  value={googleEmail} 
-                  onChange={(e) => setGoogleEmail(e.target.value)} 
-                  placeholder="name@gmail.com" 
-                  className="form-input"
-                  style={{ borderRadius: '16px' }}
-                  required
-                />
-              </div>
-
-              <button 
-                type="submit" 
-                disabled={isGoogleLoading} 
-                className="btn-primary" 
-                style={{ width: '100%', marginBottom: '10px' }}
-              >
-                {isGoogleLoading ? 'Connecting Google SSO...' : 'Log In / Continue'}
-              </button>
-
-              <button 
-                type="button" 
-                onClick={() => setShowGoogleModal(false)} 
-                className="btn-secondary" 
-                style={{ width: '100%' }}
-              >
-                Cancel
-              </button>
-            </form>
+            <button 
+              type="button" 
+              onClick={() => { setShowGoogleModal(false); setShowCustomEmailInput(false); }} 
+              className="btn-secondary" 
+              style={{ width: '100%' }}
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
+
 
       {/* 2. PASSWORD LOGIN WARNING NOTICE MODAL (FOR TEAM / ADMIN ONLY) */}
       {showWarningModal && (
