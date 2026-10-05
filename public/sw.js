@@ -1,5 +1,5 @@
 // Cufy Native PWA Over-The-Air (OTA) Instant Live Update Service Worker
-const CACHE_NAME = 'cufy-cache-v4';
+const CACHE_NAME = 'cufy-cache-v5';
 
 const STATIC_PRECACHE = [
   '/',
@@ -25,7 +25,7 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         cacheNames.map((cache) => {
           if (cache !== CACHE_NAME) {
-            console.log('[SW] Clearing old cache version:', cache);
+            console.log('[SW] Purging old cache version:', cache);
             return caches.delete(cache);
           }
         })
@@ -54,8 +54,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 2. Network-First strategy for HTML / index.html (Ensures newest deployment is served on every app launch)
-  if (event.request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
+  // 2. Network-First strategy for HTML and JS bundles (Ensures newest code deployment is served immediately)
+  if (event.request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html') || url.pathname.endsWith('.js')) {
     event.respondWith(
       fetch(event.request)
         .then((networkResponse) => {
@@ -73,7 +73,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 3. Stale-While-Revalidate for JS, CSS, and Images (Instant 0ms load + background update)
+  // 3. Stale-While-Revalidate for CSS and Images (Instant 0ms load + background update)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       const fetchPromise = fetch(event.request).then((networkResponse) => {
@@ -87,3 +87,4 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+

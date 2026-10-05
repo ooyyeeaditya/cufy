@@ -98,11 +98,20 @@ export default function App() {
           setViewState('app');
           setIsAdminOpen(false);
         }
+      } else {
+        // No logged-in user in localStorage -> reset session state cleanly
+        setUserProfile(null);
+        setViewState('welcome');
+        setIsAdminOpen(false);
       }
     } catch (err) {
       console.error('Session restore error:', err);
+      setUserProfile(null);
+      setViewState('welcome');
+      setIsAdminOpen(false);
     }
   };
+
 
   // Restore persistent login session from localStorage on app launch & listen for approval events
   useEffect(() => {
