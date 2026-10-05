@@ -91,9 +91,12 @@ export default function App() {
       if (savedUser) {
         const parsed = JSON.parse(savedUser);
         setUserProfile(parsed);
-        setViewState('app'); // PRESERVE LOGGED IN SESSION ON RELOAD / OTA UPDATES
         if (parsed?.isAdmin) {
+          setViewState('admin');
           setIsAdminOpen(true);
+        } else {
+          setViewState('app');
+          setIsAdminOpen(false);
         }
       }
     } catch (err) {
@@ -130,12 +133,17 @@ export default function App() {
     setUserProfile(completedData);
     localStorage.setItem('cufy_active_user', JSON.stringify(completedData));
     saveUserToDatabase(completedData);
-    setViewState('app');
-    setAppTab('home');
 
-    // Show welcome modal for active approved accounts
-    if (completedData.status === 'approved' || completedData.gender === 'Woman') {
-      setShowWelcomeModal(true);
+    if (completedData.isAdmin) {
+      setViewState('admin');
+      setIsAdminOpen(true);
+    } else {
+      setViewState('app');
+      setAppTab('home');
+      setIsAdminOpen(false);
+      if (completedData.status === 'approved' || completedData.gender === 'Woman') {
+        setShowWelcomeModal(true);
+      }
     }
   };
 
@@ -144,12 +152,28 @@ export default function App() {
     setUserProfile(user);
     localStorage.setItem('cufy_active_user', JSON.stringify(user));
     saveUserToDatabase(user);
-    setViewState('app');
-    setAppTab('home');
 
-    if (user.gender === 'Woman' || user.status === 'approved') {
-      setShowWelcomeModal(true);
+    if (user.isAdmin) {
+      setViewState('admin');
+      setIsAdminOpen(true);
+    } else {
+      setViewState('app');
+      setAppTab('home');
+      setIsAdminOpen(false);
+      if (user.gender === 'Woman' || user.status === 'approved') {
+        setShowWelcomeModal(true);
+      }
     }
+  };
+
+  // Update profile handler (persists edits to active user session and database)
+  const handleUpdateProfile = (updatedFields) => {
+    setUserProfile(prev => {
+      const updated = { ...prev, ...updatedFields };
+      localStorage.setItem('cufy_active_user', JSON.stringify(updated));
+      saveUserToDatabase(updated);
+      return updated;
+    });
   };
 
   // View individual profile
@@ -187,6 +211,7 @@ export default function App() {
   const handleLogout = () => {
     setUserProfile(null);
     localStorage.removeItem('cufy_active_user');
+    setIsAdminOpen(false);
     setViewState('welcome');
   };
 
@@ -201,7 +226,10 @@ export default function App() {
         onToggleWidth={() => setIsFullWidth(!isFullWidth)}
         onOpenPrivacy={() => setIsPrivacyOpen(true)}
         onOpenTerms={() => setIsTermsOpen(true)}
-        onOpenAdmin={() => setIsAdminOpen(true)}
+        onOpenAdmin={() => {
+          setIsAdminOpen(true);
+          if (userProfile?.isAdmin) setViewState('admin');
+        }}
       />
 
       {/* Main App Frame Container */}
@@ -224,6 +252,20 @@ export default function App() {
               initialData={userProfile}
               onCompleteOnboarding={handleCompleteOnboarding}
               onCancel={() => setViewState('welcome')}
+            />
+          )}
+
+          {/* DEDICATED FULL-SCREEN ADMIN PANEL VIEW */}
+          {viewState === 'admin' && (
+            <AdminPanel 
+              isOpen={true}
+              onClose={() => {
+                setIsAdminOpen(false);
+                setViewState('welcome');
+              }}
+              userProfile={userProfile}
+              onLoginSuccess={handleLoginSuccess}
+              onLogout={handleLogout}
             />
           )}
 
@@ -335,7 +377,11 @@ export default function App() {
                       onOpenPrivacy={() => setIsPrivacyOpen(true)}
                       onOpenTerms={() => setIsTermsOpen(true)}
                       onLogout={handleLogout}
-                      onOpenAdmin={() => setIsAdminOpen(true)}
+                      onOpenAdmin={() => {
+                        setIsAdminOpen(true);
+                        if (userProfile?.isAdmin) setViewState('admin');
+                      }}
+                      onUpdateProfile={handleUpdateProfile}
                     />
                   )}
 
@@ -438,11 +484,16 @@ export default function App() {
             <NotFound onReturnHome={() => setViewState('welcome')} />
           )}
 
-          {/* ADMIN MANAGEMENT PORTAL */}
-          <AdminPanel 
-            isOpen={isAdminOpen}
-            onClose={() => setIsAdminOpen(false)}
-          />
+          {/* ADMIN MANAGEMENT PORTAL MODAL (When opened via Settings or button) */}
+          {(isAdminOpen && viewState !== 'admin') && (
+            <AdminPanel 
+              isOpen={true}
+              onClose={() => setIsAdminOpen(false)}
+              userProfile={userProfile}
+              onLoginSuccess={handleLoginSuccess}
+              onLogout={handleLogout}
+            />
+          )}
 
         </div>
       </main>
@@ -460,3 +511,4 @@ export default function App() {
     </div>
   );
 }
+

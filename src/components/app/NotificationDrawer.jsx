@@ -1,38 +1,21 @@
 import React from 'react';
-import { X, Bell, Heart, Flame, MessageSquare } from 'lucide-react';
+import { X, Bell, Heart, Flame, MessageSquare, Sparkles } from 'lucide-react';
 
-export default function NotificationDrawer({ isOpen, onClose, onSelectNotification }) {
+export default function NotificationDrawer({ isOpen, onClose, onSelectNotification, userNotifications = [] }) {
   if (!isOpen) return null;
 
-  const notifications = [
-    {
-      id: 1,
-      type: 'like',
-      title: 'Priya liked your profile',
-      subtitle: '5 minutes ago • Click to open match',
-      icon: Heart,
-      iconColor: '#FF3B30',
-      bgColor: '#FFF0F0'
-    },
-    {
-      id: 2,
-      type: 'curated',
-      title: 'Your daily curated match is ready',
-      subtitle: '1 hour ago • 1 connection selected for you today',
-      icon: Flame,
-      iconColor: '#F59E0B',
-      bgColor: '#FEF3C7'
-    },
-    {
-      id: 3,
-      type: 'chat',
-      title: 'Elena sent you a message',
-      subtitle: '3 hours ago • "Hey! Love your photo in Austin!"',
-      icon: MessageSquare,
-      iconColor: '#3B82F6',
-      bgColor: '#EFF6FF'
+  // Load real notifications from props or localStorage
+  let notifications = userNotifications;
+  if (!notifications || notifications.length === 0) {
+    try {
+      const stored = localStorage.getItem('cufy_notifications');
+      if (stored) {
+        notifications = JSON.parse(stored);
+      }
+    } catch (e) {
+      notifications = [];
     }
-  ];
+  }
 
   return (
     <div style={{
@@ -72,48 +55,79 @@ export default function NotificationDrawer({ isOpen, onClose, onSelectNotificati
           </button>
         </div>
 
-        {/* Notifications List */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-          {notifications.map((notif) => (
-            <div 
-              key={notif.id}
-              onClick={() => {
-                onSelectNotification(notif);
-                onClose();
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '14px',
-                padding: '14px 16px',
-                borderRadius: '20px',
-                background: '#F9F8F6',
-                border: '1.5px solid #E4E4E7',
-                cursor: 'pointer',
-                transition: 'transform 0.2s var(--ease-spring)'
-              }}
-            >
-              <div style={{
-                width: '42px',
-                height: '42px',
-                borderRadius: '14px',
-                background: notif.bgColor,
-                color: notif.iconColor,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0
-              }}>
-                <notif.icon size={20} fill={notif.type === 'like' ? notif.iconColor : 'none'} />
-              </div>
-
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#09090B' }}>{notif.title}</div>
-                <div style={{ fontSize: '0.78rem', color: '#71717A', fontWeight: 500, marginTop: '2px' }}>{notif.subtitle}</div>
-              </div>
+        {/* Notifications List or Clean Empty State */}
+        {(!notifications || notifications.length === 0) ? (
+          <div style={{
+            textAlign: 'center',
+            padding: '36px 16px',
+            background: '#F9F8F6',
+            borderRadius: '24px',
+            border: '1.5px solid #E4E4E7',
+            marginBottom: '20px'
+          }}>
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '20px',
+              background: '#FFF0F0',
+              color: '#FF3B30',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 14px'
+            }}>
+              <Bell size={28} />
             </div>
-          ))}
-        </div>
+            <h4 style={{ fontSize: '1.1rem', fontWeight: 900, color: '#09090B', marginBottom: '6px' }}>
+              No Notifications Yet
+            </h4>
+            <p style={{ fontSize: '0.85rem', color: '#71717A', lineHeight: '1.4', margin: 0 }}>
+              When people like your profile, match with you, or send messages, alerts will appear here.
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+            {notifications.map((notif, idx) => (
+              <div 
+                key={notif.id || idx}
+                onClick={() => {
+                  if (onSelectNotification) onSelectNotification(notif);
+                  onClose();
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '14px',
+                  padding: '14px 16px',
+                  borderRadius: '20px',
+                  background: '#F9F8F6',
+                  border: '1.5px solid #E4E4E7',
+                  cursor: 'pointer',
+                  transition: 'transform 0.2s var(--ease-spring)'
+                }}
+              >
+                <div style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '14px',
+                  background: notif.type === 'like' ? '#FFF0F0' : '#EFF6FF',
+                  color: notif.type === 'like' ? '#FF3B30' : '#3B82F6',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  {notif.type === 'like' ? <Heart size={20} fill="#FF3B30" /> : <MessageSquare size={20} />}
+                </div>
+
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#09090B' }}>{notif.title}</div>
+                  <div style={{ fontSize: '0.78rem', color: '#71717A', fontWeight: 500, marginTop: '2px' }}>{notif.subtitle}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Close CTA */}
         <button onClick={onClose} className="btn-secondary">

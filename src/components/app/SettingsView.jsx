@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Edit2, Zap, ShieldCheck, Lock, ChevronRight, CheckCircle2, RotateCcw, UserX, X, Camera, Sparkles } from 'lucide-react';
 import EditProfileModal from './EditProfileModal';
 
-export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, onLogout, onOpenAdmin }) {
+export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, onLogout, onOpenAdmin, onUpdateProfile }) {
   const [toastMessage, setToastMessage] = useState('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isBoostActive, setIsBoostActive] = useState(false);
@@ -12,31 +12,65 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
   const [profileData, setProfileData] = useState({
     name: userProfile?.name || 'Aditya',
     gender: userProfile?.gender || 'Man',
-    bio: userProfile?.bio || 'Architecture enthusiast, sourdough baker, and lover of spontaneous getaways.',
+    bio: userProfile?.bio || '',
     promptQuestion: userProfile?.promptQuestion || 'Ideal Sunday Morning',
-    promptAnswer: userProfile?.promptAnswer || 'Fresh pour-over coffee, listening to vinyl records, and long walk in the park.',
+    promptAnswer: userProfile?.promptAnswer || '',
     height: userProfile?.height || "178 cm (5'10\")",
     city: userProfile?.city || 'Greater Noida',
-    occupation: userProfile?.occupation || userProfile?.jobTitle || 'Product Designer',
-    education: userProfile?.education || 'Bachelor',
-    religion: userProfile?.religion || 'Agnostic',
+    occupation: userProfile?.occupation || userProfile?.jobTitle || '',
+    education: userProfile?.education || '',
+    religion: userProfile?.religion || '',
     photos: userProfile?.photos || ['/photos/front1.jpg']
   });
 
+  // Keep internal profile state synced with external userProfile prop
+  useEffect(() => {
+    if (userProfile) {
+      setProfileData(prev => ({
+        ...prev,
+        name: userProfile.name || prev.name,
+        gender: userProfile.gender || prev.gender,
+        bio: userProfile.bio !== undefined ? userProfile.bio : prev.bio,
+        promptQuestion: userProfile.promptQuestion || prev.promptQuestion,
+        promptAnswer: userProfile.promptAnswer !== undefined ? userProfile.promptAnswer : prev.promptAnswer,
+        height: userProfile.height || prev.height,
+        city: userProfile.city || prev.city,
+        occupation: userProfile.occupation || userProfile.jobTitle || prev.occupation,
+        education: userProfile.education || prev.education,
+        religion: userProfile.religion || prev.religion,
+        photos: (userProfile.photos && userProfile.photos.length > 0) ? userProfile.photos : prev.photos
+      }));
+    }
+  }, [userProfile]);
+
   // Calculate dynamic profile completion percentage based on filled profile fields
   const calculateProfileScore = (data) => {
+    if (!data) return 15;
     let score = 0;
-    if (data.name && data.name.trim()) score += 15;
-    if (data.bio && data.bio.trim()) score += 15;
-    if (data.promptAnswer && data.promptAnswer.trim()) score += 15;
-    if (data.city && data.city.trim()) score += 10;
-    if (data.occupation || data.jobTitle) score += 10;
-    if (data.education) score += 10;
-    if (data.religion) score += 5;
     
-    // Photo scoring (up to 20% max)
-    const validPhotos = (data.photos || []).filter(p => Boolean(p));
-    score += Math.min(20, validPhotos.length * 5);
+    // Name (10%)
+    if (data.name && data.name.trim().length > 0) score += 10;
+    
+    // Bio (25%) - length dependent
+    if (data.bio && data.bio.trim().length > 15) score += 25;
+    else if (data.bio && data.bio.trim().length > 0) score += 12;
+    
+    // Prompt & Answer (20%)
+    if (data.promptAnswer && data.promptAnswer.trim().length > 5) score += 20;
+    else if (data.promptAnswer && data.promptAnswer.trim().length > 0) score += 10;
+    
+    // City (10%)
+    if (data.city && data.city.trim().length > 0) score += 10;
+    
+    // Occupation/Job (10%)
+    if ((data.occupation && data.occupation.trim().length > 0) || (data.jobTitle && data.jobTitle.trim().length > 0)) score += 10;
+    
+    // Education (10%)
+    if (data.education && data.education.trim().length > 0) score += 10;
+    
+    // Photos (up to 15% max - 5% per photo up to 3 photos)
+    const validPhotos = (data.photos || []).filter(p => Boolean(p) && typeof p === 'string' && p.trim().length > 0);
+    score += Math.min(15, validPhotos.length * 5);
 
     return Math.min(100, Math.max(15, score));
   };
@@ -52,8 +86,14 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
     const updated = { ...profileData, ...updatedData };
     setProfileData(updated);
     const newScore = calculateProfileScore(updated);
+
+    if (onUpdateProfile) {
+      onUpdateProfile(updated);
+    }
+
     showToast(`Profile successfully updated! Profile strength now ${newScore}%.`);
   };
+
 
   const handleBoost = () => {
     setIsBoostActive(true);
