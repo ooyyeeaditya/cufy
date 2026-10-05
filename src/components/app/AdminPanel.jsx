@@ -276,27 +276,6 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <button 
-                onClick={handleManualSupabaseSync}
-                disabled={isSyncingSupabase}
-                style={{
-                  padding: '8px 12px',
-                  background: isSyncingSupabase ? '#E4E4E7' : '#09090B',
-                  color: '#FFFFFF',
-                  borderRadius: '12px',
-                  fontSize: '0.78rem',
-                  fontWeight: 800,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  border: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                <UploadCloud size={14} />
-                <span>{isSyncingSupabase ? 'Syncing...' : 'Sync Supabase'}</span>
-              </button>
-
               <button onClick={() => setIsAuthenticated(false)} style={{ padding: '8px 12px', background: '#F4F4F5', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 800, color: '#09090B' }}>
                 Log out
               </button>
@@ -305,12 +284,6 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
               </button>
             </div>
           </div>
-
-          {syncMsg && (
-            <div style={{ margin: '8px 20px 0', padding: '10px 14px', background: '#ECFDF5', border: '1px solid #6EE7B7', color: '#065F46', borderRadius: '14px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'center' }}>
-              {syncMsg}
-            </div>
-          )}
 
           {/* Quick Metrics Cards */}
           <div style={{ padding: '14px 20px 6px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
