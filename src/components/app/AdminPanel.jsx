@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ShieldCheck, CheckCircle2, XCircle, Users, Heart, CreditCard, LogOut, ChevronRight, Eye, UserX, AlertCircle, RefreshCw, Phone, Mail, MapPin, Sparkles, Camera, Zap, Check, X } from 'lucide-react';
 import { ENV } from '../../config/env';
 import { fetchAllCloudUsers, updateCloudUserStatus } from '../../lib/cloudSync';
+import { supabase } from '../../lib/supabase';
 
 export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSuccess, onLogout }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -66,14 +67,14 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
     };
 
     loadUsers();
-    const pollInterval = setInterval(loadUsers, 4000); // 4s Real-Time Multi-Device Polling Loop
+    const pollInterval = setInterval(loadUsers, 3000); // 3s Real-Time Multi-Device Polling Loop
 
     return () => clearInterval(pollInterval);
   }, [isOpen, isAuthenticated, userProfile]);
 
   if (!isOpen) return null;
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     const cleanEmail = email.trim().toLowerCase();
     const cleanPass = password.trim();
@@ -84,6 +85,15 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
     if (isMatch) {
       setIsAuthenticated(true);
       setLoginError('');
+      
+      // Attempt Supabase Admin Auth session
+      try {
+        await supabase.auth.signInWithPassword({
+          email: 'cupid.livepro@gmail.com',
+          password: 'cUpid.livepro#@3210'
+        });
+      } catch (aErr) {}
+
       if (onLoginSuccess) {
         onLoginSuccess({ email: 'cupid.livepro@gmail.com', name: 'Admin', isAdmin: true });
       }
