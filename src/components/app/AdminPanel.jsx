@@ -3,7 +3,7 @@ import { ShieldCheck, CheckCircle2, XCircle, Users, Heart, CreditCard, LogOut, C
 import { ENV } from '../../config/env';
 
 export default function AdminPanel({ isOpen, onClose }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [email, setEmail] = useState(ENV.ADMIN_EMAIL);
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -12,155 +12,30 @@ export default function AdminPanel({ isOpen, onClose }) {
   const [activeTab, setActiveTab] = useState('verifications');
   const [genderFilter, setGenderFilter] = useState('All'); // 'All' | 'Men' | 'Women' | 'Others'
 
-  // Verification Screenshots Queue State
-  const [pendingPayments, setPendingPayments] = useState([
-    {
-      id: 'pay_101',
-      userId: 'usr_101',
-      userName: 'Aditya Chauhan',
-      userEmail: 'aditya@example.com',
-      userPhone: '+91 9876543210',
-      gender: 'Man',
-      planName: '1 Week VIP Pass',
-      amount: '₹299',
-      type: 'Membership Pass',
-      screenshotUrl: '/photos/couple1.jpg',
-      timestamp: '10 mins ago',
-      status: 'pending'
-    },
-    {
-      id: 'pay_102',
-      userId: 'usr_102',
-      userName: 'Rahul Sharma',
-      userEmail: 'rahul.s@example.com',
-      userPhone: '+91 9812345678',
-      gender: 'Man',
-      planName: '4 Profile Boosts Pack',
-      amount: '₹399',
-      type: 'Boost Pack',
-      screenshotUrl: '/photos/couple2.jpg',
-      timestamp: '25 mins ago',
-      status: 'pending'
-    },
-    {
-      id: 'pay_103',
-      userId: 'usr_103',
-      userName: 'Priya Verma',
-      userEmail: 'priya.v@example.com',
-      userPhone: '+91 9988776655',
-      gender: 'Woman',
-      planName: '1 Boost Pack',
-      amount: '₹149',
-      type: 'Boost Pack',
-      screenshotUrl: '/photos/couple3.jpg',
-      timestamp: '1 hour ago',
-      status: 'pending'
-    }
-  ]);
-
-  // Full User Database with Gender Classification
-  const [usersList, setUsersList] = useState([
-    {
-      id: 'usr_101',
-      name: 'Aditya Chauhan',
-      age: 22,
-      gender: 'Man',
-      city: 'Greater Noida',
-      email: 'aditya@example.com',
-      phone: '+91 9876543210',
-      status: 'Active',
-      plan: '1 Week VIP Pass',
-      registered: 'Oct 04, 2026',
-      photos: ['https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=80'],
-      matches: [
-        { name: 'Priya', matchedAt: 'Today, 10:14 AM', status: 'Active Chat' },
-        { name: 'Maya', matchedAt: 'Yesterday, 8:30 PM', status: 'Active Chat' }
-      ],
-      payments: [
-        { plan: '1 Week VIP Pass', amount: '₹299', date: 'Oct 04, 2026', status: 'Approved', screenshot: '/photos/couple1.jpg' }
-      ],
-      boostActive: false
-    },
-    {
-      id: 'usr_102',
-      name: 'Rahul Sharma',
-      age: 25,
-      gender: 'Man',
-      city: 'New Delhi',
-      email: 'rahul.s@example.com',
-      phone: '+91 9812345678',
-      status: 'Active',
-      plan: '1 Month Pass',
-      registered: 'Oct 01, 2026',
-      photos: ['https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&auto=format&fit=crop&q=80'],
-      matches: [
-        { name: 'Elena', matchedAt: '2 days ago', status: 'New Match' }
-      ],
-      payments: [
-        { plan: '1 Month Pass', amount: '₹799', date: 'Oct 01, 2026', status: 'Approved', screenshot: '/photos/couple2.jpg' }
-      ],
-      boostActive: true
-    },
-    {
-      id: 'usr_103',
-      name: 'Priya Verma',
-      age: 21,
-      gender: 'Woman',
-      city: 'Greater Noida',
-      email: 'priya.v@example.com',
-      phone: '+91 9988776655',
-      status: 'Active',
-      plan: 'Free VIP Pass (Women)',
-      registered: 'Oct 03, 2026',
-      photos: ['https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800&auto=format&fit=crop&q=80'],
-      matches: [
-        { name: 'Aditya Chauhan', matchedAt: 'Today, 10:14 AM', status: 'Active Chat' }
-      ],
-      payments: [
-        { plan: '1 Boost Pack', amount: '₹149', date: 'Today, 11:00 AM', status: 'Pending Verification', screenshot: '/photos/couple3.jpg' }
-      ],
-      boostActive: false
-    },
-    {
-      id: 'usr_104',
-      name: 'Maya Sen',
-      age: 23,
-      gender: 'Woman',
-      city: 'Mumbai',
-      email: 'maya@example.com',
-      phone: '+91 9776655443',
-      status: 'Active',
-      plan: 'Free VIP Pass (Women)',
-      registered: 'Sep 29, 2026',
-      photos: ['https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800&auto=format&fit=crop&q=80'],
-      matches: [
-        { name: 'Aditya Chauhan', matchedAt: 'Yesterday, 8:30 PM', status: 'Active Chat' }
-      ],
-      payments: [],
-      boostActive: false
-    }
-  ]);
-
-  const [expiredList, setExpiredList] = useState([
-    { id: 'exp_1', name: 'Sameer Verma', email: 'sameer@example.com', reason: 'Subscription Expired', date: 'Oct 01, 2026' },
-    { id: 'exp_2', name: 'Karan Mehra', email: 'karan@example.com', reason: 'User Deleted Account', date: 'Sep 28, 2026' }
-  ]);
+  // Real Database State (Zero Fake / Dummy Profiles)
+  const [pendingPayments, setPendingPayments] = useState([]);
+  const [usersList, setUsersList] = useState([]);
+  const [expiredList, setExpiredList] = useState([]);
 
   // Modals state
   const [selectedUserModal, setSelectedUserModal] = useState(null);
   const [selectedScreenshot, setSelectedScreenshot] = useState(null);
 
-  // Sync real registered users from database whenever panel opens
+  // Sync real registered users from database whenever panel opens or authenticates
   React.useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setIsAuthenticated(false);
+      return;
+    }
+
     try {
       const dbStr = localStorage.getItem('cufy_registered_users');
       if (dbStr) {
         const parsedUsers = JSON.parse(dbStr);
-        if (Array.isArray(parsedUsers) && parsedUsers.length > 0) {
+        if (Array.isArray(parsedUsers)) {
           setUsersList(parsedUsers);
 
-          // Build pending verifications list from real users
+          // Build pending verifications queue exclusively from real users
           const pending = parsedUsers.map(u => ({
             id: `pay_${u.id}`,
             userId: u.id,
@@ -168,7 +43,7 @@ export default function AdminPanel({ isOpen, onClose }) {
             userEmail: u.email,
             userPhone: u.phone || '+91 9876543210',
             gender: u.gender || 'Man',
-            planName: u.plan || '1 Month VIP Pass',
+            planName: u.plan || (u.gender === 'Woman' ? 'Free Pass for Women' : '1 Month VIP Pass'),
             amount: u.gender === 'Woman' ? '₹0 FREE' : '₹799',
             type: 'Membership Pass',
             screenshotUrl: u.paymentProofUrl || u.paymentProof || '/photos/couple1.jpg',
@@ -177,11 +52,14 @@ export default function AdminPanel({ isOpen, onClose }) {
           }));
           setPendingPayments(pending);
         }
+      } else {
+        setUsersList([]);
+        setPendingPayments([]);
       }
     } catch (err) {
       console.error('Error loading db users in AdminPanel:', err);
     }
-  }, [isOpen]);
+  }, [isOpen, isAuthenticated]);
 
   if (!isOpen) return null;
 
