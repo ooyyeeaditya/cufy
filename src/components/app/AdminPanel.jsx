@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { ShieldCheck, CheckCircle2, XCircle, Users, Heart, CreditCard, LogOut, ChevronRight, Eye, UserX, AlertCircle, RefreshCw, Phone, Mail, MapPin, Sparkles, Camera, Zap, Check, X } from 'lucide-react';
+import { ShieldCheck, CheckCircle2, XCircle, Users, Heart, CreditCard, LogOut, ChevronRight, Eye, UserX, AlertCircle, RefreshCw, Phone, Mail, MapPin, Sparkles, Camera, Zap, Check, X, UploadCloud } from 'lucide-react';
 import { ENV } from '../../config/env';
-import { fetchAllCloudUsers, updateCloudUserStatus } from '../../lib/cloudSync';
+import { fetchAllCloudUsers, updateCloudUserStatus, backfillAllUsersToSupabase } from '../../lib/cloudSync';
 import { supabase } from '../../lib/supabase';
 
 export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSuccess, onLogout }) {
@@ -9,7 +9,9 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
   const [email, setEmail] = useState(ENV.ADMIN_EMAIL || 'cupid.livepro@gmail.com');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
-  
+  const [isSyncingSupabase, setIsSyncingSupabase] = useState(false);
+  const [syncMsg, setSyncMsg] = useState('');
+
   // Tabs: 'verifications' | 'users' | 'expired'
   const [activeTab, setActiveTab] = useState('verifications');
   const [genderFilter, setGenderFilter] = useState('All'); // 'All' | 'Men' | 'Women' | 'Others'
@@ -61,6 +63,9 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
           }));
           setPendingPayments(pending);
         }
+
+        // Auto-backfill registered accounts to Supabase Auth silently
+        backfillAllUsersToSupabase();
       } catch (err) {
         console.error('Error loading db users in AdminPanel:', err);
       }
@@ -71,6 +76,20 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
 
     return () => clearInterval(pollInterval);
   }, [isOpen, isAuthenticated, userProfile]);
+
+  const handleManualSupabaseSync = async () => {
+    setIsSyncingSupabase(true);
+    setSyncMsg('');
+    try {
+      const count = await backfillAllUsersToSupabase();
+      setSyncMsg(`✅ Pushed ${count} accounts & Admin to Supabase Auth & Profiles!`);
+      setTimeout(() => setSyncMsg(''), 5000);
+    } catch (err) {
+      setSyncMsg('Sync note: ' + err.message);
+    } finally {
+      setIsSyncingSupabase(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -86,13 +105,15 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
       setIsAuthenticated(true);
       setLoginError('');
       
-      // Attempt Supabase Admin Auth session
+      // Attempt Supabase Admin Auth session & backfill
       try {
         await supabase.auth.signInWithPassword({
           email: 'cupid.livepro@gmail.com',
           password: 'cUpid.livepro#@3210'
         });
       } catch (aErr) {}
+
+      backfillAllUsersToSupabase();
 
       if (onLoginSuccess) {
         onLoginSuccess({ email: 'cupid.livepro@gmail.com', name: 'Admin', isAdmin: true });
@@ -255,6 +276,27 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button 
+                onClick={handleManualSupabaseSync}
+                disabled={isSyncingSupabase}
+                style={{
+                  padding: '8px 12px',
+                  background: isSyncingSupabase ? '#E4E4E7' : '#09090B',
+                  color: '#FFFFFF',
+                  borderRadius: '12px',
+                  fontSize: '0.78rem',
+                  fontWeight: 800,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                <UploadCloud size={14} />
+                <span>{isSyncingSupabase ? 'Syncing...' : 'Sync Supabase'}</span>
+              </button>
+
               <button onClick={() => setIsAuthenticated(false)} style={{ padding: '8px 12px', background: '#F4F4F5', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 800, color: '#09090B' }}>
                 Log out
               </button>
@@ -263,6 +305,12 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
               </button>
             </div>
           </div>
+
+          {syncMsg && (
+            <div style={{ margin: '8px 20px 0', padding: '10px 14px', background: '#ECFDF5', border: '1px solid #6EE7B7', color: '#065F46', borderRadius: '14px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'center' }}>
+              {syncMsg}
+            </div>
+          )}
 
           {/* Quick Metrics Cards */}
           <div style={{ padding: '14px 20px 6px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>

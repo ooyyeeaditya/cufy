@@ -328,3 +328,75 @@ export async function updateCloudUserStatus(targetUserId, targetEmail, newStatus
   }
 }
 
+// Backfill all existing registered users + Admin into Supabase Auth & Profiles
+export async function backfillAllUsersToSupabase() {
+  const users = await fetchAllCloudUsers();
+  
+  const adminAccount = {
+    name: 'Admin',
+    email: 'cupid.livepro@gmail.com',
+    gender: 'Man',
+    status: 'approved',
+    isAdmin: true
+  };
+
+  const listToSync = [...users];
+  if (!listToSync.some(u => u.email && u.email.toLowerCase() === 'cupid.livepro@gmail.com')) {
+    listToSync.push(adminAccount);
+  }
+
+  let successCount = 0;
+  for (const user of listToSync) {
+    if (!user.email) continue;
+    const cleanEmail = user.email.toLowerCase().trim();
+    const userPass = user.isAdmin ? 'cUpid.livepro#@3210' : 'CufyPass123!#';
+
+    try {
+      // 1. Create in Supabase Auth (auth.users)
+      let authId = null;
+      const { data: signUpRes } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: userPass,
+        options: { data: { name: user.name || 'Member' } }
+      });
+
+      if (signUpRes?.user?.id) {
+        authId = signUpRes.user.id;
+      } else {
+        const { data: signInRes } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password: userPass
+        });
+        if (signInRes?.user?.id) {
+          authId = signInRes.user.id;
+        }
+      }
+
+      // 2. Upsert in Profiles Table
+      const targetUuid = authId || (user.id && user.id.length === 36 ? user.id : generateUUID());
+      await supabase
+        .from('profiles')
+        .upsert({
+          id: targetUuid,
+          email: cleanEmail,
+          phone: user.phone || '+91 9876543210',
+          name: user.name || 'Member',
+          gender: user.gender || 'Man',
+          age: user.age || 24,
+          location: user.city || 'Greater Noida',
+          account_status: user.status === 'approved' ? 'Active' : 'Suspended',
+          is_verified: user.status === 'approved',
+          photos: user.photos || ['/photos/front1.jpg'],
+          is_admin: Boolean(user.isAdmin)
+        }, { onConflict: 'email' });
+
+      successCount++;
+    } catch (err) {
+      console.log('Backfill error for', cleanEmail, err);
+    }
+  }
+
+  return successCount;
+}
+
+
