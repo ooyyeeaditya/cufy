@@ -84,15 +84,25 @@ export async function syncUserToCloud(record) {
   try {
     let authUserId = null;
     try {
-      const { data: signUpRes } = await supabase.auth.signUp({
+      const { data: signUpRes, error: sErr } = await supabase.auth.signUp({
         email: userEmail,
         password: 'CufyPass123!#',
         options: { data: { name: syncPayload.name } }
       });
       if (signUpRes?.user?.id) {
         authUserId = signUpRes.user.id;
+      } else {
+        const { data: signInRes } = await supabase.auth.signInWithPassword({
+          email: userEmail,
+          password: 'CufyPass123!#'
+        });
+        if (signInRes?.user?.id) {
+          authUserId = signInRes.user.id;
+        }
       }
-    } catch (aErr) {}
+    } catch (aErr) {
+      console.log('Supabase auth note:', aErr);
+    }
 
     const targetUuid = authUserId || (record.id && record.id.length === 36 ? record.id : generateUUID());
 

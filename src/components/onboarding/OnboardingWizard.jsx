@@ -237,11 +237,10 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
       setIsProcessingPayment(false);
       setPaymentSuccess(true);
       setTimeout(() => {
-        const isFemale = formData.gender === 'Woman';
         const completedData = {
           ...formData,
           paymentProofUrl,
-          status: isFemale ? 'approved' : 'pending_approval'
+          status: 'pending_approval'
         };
         onCompleteOnboarding(completedData);
       }, 1000);

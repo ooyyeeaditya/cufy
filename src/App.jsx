@@ -66,7 +66,7 @@ export default function App() {
         city: user.city || 'Greater Noida',
         email: userEmail,
         phone: user.phone || '+91 9876543210',
-        status: user.status || (user.gender === 'Woman' ? 'approved' : 'pending_approval'),
+        status: user.status || 'pending_approval',
         plan: user.plan || (user.gender === 'Woman' ? 'Free Pass for Women' : '1 Month VIP Pass'),
         registered: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
         photos: (user.photos && user.photos.filter(p => Boolean(p)).length > 0) ? user.photos : ['/photos/front1.jpg'],
@@ -161,7 +161,7 @@ export default function App() {
       setViewState('app');
       setAppTab('home');
       setIsAdminOpen(false);
-      if (completedData.status === 'approved' || completedData.gender === 'Woman') {
+      if (completedData.status === 'approved') {
         setShowWelcomeModal(true);
       }
     }
@@ -180,7 +180,7 @@ export default function App() {
       setViewState('app');
       setAppTab('home');
       setIsAdminOpen(false);
-      if (user.gender === 'Woman' || user.status === 'approved') {
+      if (user.status === 'approved') {
         setShowWelcomeModal(true);
       }
     }
@@ -235,7 +235,7 @@ export default function App() {
     setViewState('welcome');
   };
 
-  const isPendingApproval = userProfile && userProfile.gender !== 'Woman' && userProfile.status === 'pending_approval' && !userProfile.isAdmin;
+  const isPendingApproval = userProfile && userProfile.status === 'pending_approval' && !userProfile.isAdmin;
 
   return (
     <div className="app-container">
