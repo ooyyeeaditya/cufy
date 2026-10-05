@@ -231,28 +231,108 @@ export default function ChatDrawer({ matchProfile, onBack }) {
               ))}
             </div>
           ) : (
-            /* EMPTY CHAT LOGS STATE */
-            <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            /* EMPTY CHAT LOGS STATE (Matching Screenshot 2) */
+            <div style={{
+              textAlign: 'center',
+              padding: '40px 16px 60px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              
+              {/* Graphic Illustration Card Stack from Screenshot 2 */}
               <div style={{
-                width: '64px',
-                height: '64px',
-                borderRadius: '20px',
-                background: '#FFF0F0',
-                color: '#FF3B30',
+                position: 'relative',
+                width: '240px',
+                height: '220px',
+                marginBottom: '28px',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto 16px'
+                justifyContent: 'center'
               }}>
-                <MessageSquare size={32} />
+                
+                {/* Center Rounded Portrait Card */}
+                <div style={{
+                  width: '160px',
+                  height: '160px',
+                  borderRadius: '32px',
+                  overflow: 'hidden',
+                  boxShadow: '0 16px 40px rgba(0,0,0,0.1)',
+                  border: '2px solid #FFFFFF',
+                  position: 'relative',
+                  background: '#FFFFFF'
+                }}>
+                  <img 
+                    src="/photos/front3.jpg" 
+                    alt="Smiling match portrait" 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                  />
+
+                  {/* Speech Bubble on Card */}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '16px',
+                    left: '12px',
+                    right: '12px',
+                    background: '#FFFFFF',
+                    padding: '8px 12px',
+                    borderRadius: '16px',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    color: '#09090B',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+                    textAlign: 'center'
+                  }}>
+                    i'd love to check it out!
+                  </div>
+                </div>
+
+                {/* Top Right Heart Eyes Emoji Badge */}
+                <div style={{
+                  position: 'absolute',
+                  top: '10px',
+                  right: '12px',
+                  background: '#F4F4F5',
+                  padding: '6px 12px',
+                  borderRadius: '16px 16px 16px 4px',
+                  fontSize: '1.2rem',
+                  boxShadow: '0 4px 14px rgba(0,0,0,0.08)'
+                }}>
+                  😍
+                </div>
+
+                {/* Bottom Right Laughing Emoji Badge */}
+                <div style={{
+                  position: 'absolute',
+                  bottom: '10px',
+                  right: '20px',
+                  background: '#F4F4F5',
+                  padding: '6px 12px',
+                  borderRadius: '16px 16px 16px 4px',
+                  fontSize: '1.2rem',
+                  boxShadow: '0 4px 14px rgba(0,0,0,0.08)'
+                }}>
+                  😆
+                </div>
+
               </div>
-              <h2 style={{ fontSize: '1.45rem', fontWeight: 900, marginBottom: '6px' }}>Your chats will appear here</h2>
-              <p style={{ color: '#52525B', fontSize: '0.92rem', marginBottom: '24px' }}>
-                Match with intentional members on Home to start a conversation.
+
+              {/* Exact Title from Screenshot 2 */}
+              <h2 style={{ fontSize: '1.45rem', fontWeight: 900, color: '#09090B', marginBottom: '10px', letterSpacing: '-0.4px' }}>
+                This is where conversations start
+              </h2>
+
+              {/* Exact Subtext from Screenshot 2 */}
+              <p style={{ color: '#52525B', fontSize: '0.92rem', lineHeight: '1.45', maxWidth: '310px', marginBottom: '28px', fontWeight: 500 }}>
+                Once you're in, this is where you'll chat with people you've matched with. Check out our Conversation Guide to learn how to turn a match into a date.
               </p>
-              <button onClick={onBack} className="btn-black-pill" style={{ width: 'auto', padding: '12px 24px' }}>
-                Discover Profiles
+
+              {/* Black Pill CTA Button from Screenshot 2 */}
+              <button className="btn-black-pill" style={{ width: 'auto', padding: '14px 28px' }}>
+                See what works
               </button>
+
             </div>
           )}
 

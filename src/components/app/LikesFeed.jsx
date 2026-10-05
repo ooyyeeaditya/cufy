@@ -200,7 +200,7 @@ export default function LikesFeed({ onSelectProfile, onOpenChat }) {
             </div>
           )}
 
-          {/* ULTRA CLEAN MINIMAL EMPTY STATE (Zero scroll needed!) */}
+          {/* EMPTY STATE (Matching Screenshot 1) */}
           {((activeTab === 'likes_you' && likesYouProfiles.length === 0) || (activeTab === 'you_liked' && youLikedProfiles.length === 0)) && (
             <div style={{
               flex: 1,
@@ -209,33 +209,139 @@ export default function LikesFeed({ onSelectProfile, onOpenChat }) {
               alignItems: 'center',
               justifyContent: 'center',
               textAlign: 'center',
-              padding: '10px'
+              padding: '20px 16px 40px'
             }}>
               
-              {/* Compact Heart Icon Circle */}
+              {/* Tilted Dual Card Graphic Stack */}
               <div style={{
-                width: '72px',
-                height: '72px',
-                borderRadius: '50%',
-                background: '#FFF0F0',
-                color: '#FF3B30',
+                position: 'relative',
+                width: '260px',
+                height: '240px',
+                marginBottom: '28px',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: '16px',
-                boxShadow: '0 8px 24px rgba(255,59,48,0.15)'
+                justifyContent: 'center'
               }}>
-                <Heart size={36} fill="#FF3B30" />
+                {/* Left Card: Mahi */}
+                <div style={{
+                  position: 'absolute',
+                  top: '20px',
+                  left: '10px',
+                  width: '140px',
+                  height: '180px',
+                  background: '#FFFFFF',
+                  borderRadius: '22px',
+                  padding: '10px',
+                  boxShadow: '0 12px 32px rgba(0,0,0,0.08)',
+                  transform: 'rotate(-10deg)',
+                  zIndex: 1,
+                  border: '1.5px solid #E4E4E7'
+                }}>
+                  <div style={{
+                    background: '#F4F4F5',
+                    padding: '4px 8px',
+                    borderRadius: '10px',
+                    fontSize: '0.68rem',
+                    fontWeight: 700,
+                    color: '#09090B',
+                    marginBottom: '6px',
+                    textAlign: 'left',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}>
+                    we should definit...
+                  </div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 900, textAlign: 'left', marginBottom: '6px', color: '#09090B' }}>Mahi</div>
+                  <div style={{ height: '110px', borderRadius: '14px', overflow: 'hidden' }}>
+                    <img src="/photos/front3.jpg" alt="Mahi portrait" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '16px',
+                    left: '-10px',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    background: '#FFFFFF',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1px solid #E4E4E7'
+                  }}>
+                    <Heart size={16} fill="#09090B" stroke="#09090B" />
+                  </div>
+                </div>
+
+                {/* Right Card: Aarna */}
+                <div style={{
+                  position: 'absolute',
+                  top: '0',
+                  right: '10px',
+                  width: '140px',
+                  height: '180px',
+                  background: '#FFFFFF',
+                  borderRadius: '22px',
+                  padding: '10px',
+                  boxShadow: '0 14px 36px rgba(0,0,0,0.1)',
+                  transform: 'rotate(6deg)',
+                  zIndex: 2,
+                  border: '1.5px solid #E4E4E7'
+                }}>
+                  <div style={{
+                    background: '#F4F4F5',
+                    padding: '4px 8px',
+                    borderRadius: '10px',
+                    fontSize: '0.68rem',
+                    fontWeight: 700,
+                    color: '#09090B',
+                    marginBottom: '6px',
+                    textAlign: 'left',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}>
+                    let's check it out!
+                  </div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 900, textAlign: 'left', marginBottom: '6px', color: '#09090B' }}>Aarna</div>
+                  <div style={{ height: '110px', borderRadius: '14px', overflow: 'hidden' }}>
+                    <img src="/photos/front1.jpg" alt="Aarna portrait" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '24px',
+                    right: '-10px',
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '50%',
+                    background: '#FFFFFF',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1px solid #E4E4E7'
+                  }}>
+                    <Heart size={18} fill="#09090B" stroke="#09090B" />
+                  </div>
+                </div>
+
               </div>
 
-              {/* Concise Headline */}
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#09090B', marginBottom: '4px', letterSpacing: '-0.3px' }}>
-                Likes you receive will appear here
+              {/* Exact Headline from Screenshot 1 */}
+              <h2 style={{ fontSize: '1.45rem', fontWeight: 900, color: '#09090B', marginBottom: '10px', letterSpacing: '-0.4px' }}>
+                Likes you get will appear here
               </h2>
 
-              <p style={{ fontSize: '0.84rem', color: '#71717A', fontWeight: 600, margin: 0 }}>
-                When authentic members like your profile, you will see them here.
+              {/* Exact Subtext from Screenshot 1 */}
+              <p style={{ fontSize: '0.92rem', color: '#52525B', lineHeight: '1.45', maxWidth: '300px', marginBottom: '28px', fontWeight: 500 }}>
+                Great photos and thoughtful prompts are what get people to Like you. Check out our What Works Guide for profile tips.
               </p>
+
+              {/* Black Pill CTA Button from Screenshot 1 */}
+              <button className="btn-black-pill" style={{ width: 'auto', padding: '14px 28px' }}>
+                See what works
+              </button>
 
             </div>
           )}
