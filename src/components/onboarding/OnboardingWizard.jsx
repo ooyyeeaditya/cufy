@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Check, Lock, CreditCard, ShieldCheck, Sparkles, MapPin, Zap, Pause, Play, Bell, Mic, Copy, Eye, Plus, Minus, Heart, User, Trash2, Camera, HelpCircle } from 'lucide-react';
 import { validateName, validateEmail, validatePhotos, checkRateLimit } from '../../utils/validation';
+import { fileToCompressedBase64 } from '../../utils/imageUpload';
 
 export default function OnboardingWizard({ initialData, onCompleteOnboarding, onCancel }) {
   // Total onboarding step count including question steps and interstitials
@@ -61,6 +62,7 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
   // Payment Tiers & Screenshot Upload State
   const [selectedPlan, setSelectedPlan] = useState({ id: 'week_299', title: '1 Week VIP Pass', price: 299, type: 'membership' });
   const [paymentProofUrl, setPaymentProofUrl] = useState(null);
+  const [isUploadingProof, setIsUploadingProof] = useState(false);
   const [upiCopied, setUpiCopied] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
@@ -289,13 +291,17 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
     }
   };
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (file && activeSlotIdx !== null) {
-      const imageUrl = URL.createObjectURL(file);
-      const newPhotos = [...formData.photos];
-      newPhotos[activeSlotIdx] = imageUrl;
-      setFormData({ ...formData, photos: newPhotos });
+      try {
+        const imageUrl = await fileToCompressedBase64(file, 1000, 0.8);
+        const newPhotos = [...formData.photos];
+        newPhotos[activeSlotIdx] = imageUrl;
+        setFormData(prev => ({ ...prev, photos: newPhotos }));
+      } catch (err) {
+        console.error('Failed to convert photo:', err);
+      }
     }
   };
 
@@ -1419,14 +1425,26 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
                       background: '#F9F8F6'
                     }}>
                       <Camera size={24} style={{ color: '#FF3B30', marginBottom: '4px' }} />
-                      <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#09090B' }}>Select Screenshot Image</span>
+                      <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#09090B' }}>
+                        {isUploadingProof ? 'Optimizing screenshot...' : 'Select Screenshot Image'}
+                      </span>
                       <input 
                         type="file" 
                         accept="image/*" 
                         style={{ display: 'none' }}
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0];
-                          if (file) setPaymentProofUrl(URL.createObjectURL(file));
+                          if (file) {
+                            try {
+                              setIsUploadingProof(true);
+                              const base64Url = await fileToCompressedBase64(file, 1200, 0.78);
+                              setPaymentProofUrl(base64Url);
+                            } catch (err) {
+                              console.error('Payment proof conversion error:', err);
+                            } finally {
+                              setIsUploadingProof(false);
+                            }
+                          }
                         }}
                       />
                     </label>

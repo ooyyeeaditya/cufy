@@ -370,12 +370,30 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                         <div 
                           onClick={() => setSelectedScreenshot(pay.screenshotUrl)}
                           style={{
-                            width: '60px', height: '70px', borderRadius: '12px',
-                            overflow: 'hidden', border: '1.5px solid #09090B', cursor: 'pointer', position: 'relative'
+                            width: '64px', height: '74px', borderRadius: '12px',
+                            overflow: 'hidden', border: '1.5px solid #09090B', cursor: 'pointer', position: 'relative',
+                            background: '#F4F4F5', display: 'flex', alignItems: 'center', justifyContent: 'center'
                           }}
                         >
-                          <img src={pay.screenshotUrl} alt="Payment proof" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          <span style={{ position: 'absolute', bottom: '2px', left: '2px', background: 'rgba(9,9,11,0.8)', color: '#FFFFFF', fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px' }}>
+                          {pay.screenshotUrl && !pay.screenshotUrl.startsWith('blob:') ? (
+                            <img 
+                              src={pay.screenshotUrl} 
+                              alt="Payment proof" 
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <div style={{
+                              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                              width: '100%', height: '100%', background: '#FEF2F2', padding: '4px', textAlign: 'center'
+                            }}>
+                              <Camera size={16} color="#DC2626" />
+                              <span style={{ fontSize: '0.55rem', fontWeight: 800, color: '#DC2626', marginTop: '2px' }}>Legacy</span>
+                            </div>
+                          )}
+                          <span style={{ position: 'absolute', bottom: '2px', left: '2px', background: 'rgba(9,9,11,0.85)', color: '#FFFFFF', fontSize: '0.6rem', padding: '1px 5px', borderRadius: '4px' }}>
                             View
                           </span>
                         </div>
@@ -631,25 +649,95 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
 
           {/* Screenshot Zoom Modal */}
           {selectedScreenshot && (
-            <div style={{
-              position: 'fixed',
-              top: 0, left: 0, right: 0, bottom: 0,
-              background: 'rgba(9,9,11,0.85)',
-              zIndex: 1200,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '20px'
-            }}>
-              <div style={{ maxWidth: '340px', background: '#FFFFFF', borderRadius: '24px', overflow: 'hidden', padding: '16px', textAlign: 'center' }}>
-                <img src={selectedScreenshot} alt="Full screenshot proof" style={{ width: '100%', borderRadius: '16px', maxHeight: '420px', objectFit: 'contain' }} />
-                <button 
-                  onClick={() => setSelectedScreenshot(null)}
-                  className="btn-black-pill"
-                  style={{ width: '100%', marginTop: '14px', padding: '12px' }}
-                >
-                  Close Proof
-                </button>
+            <div 
+              onClick={() => setSelectedScreenshot(null)}
+              style={{
+                position: 'fixed',
+                top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(9,9,11,0.85)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                zIndex: 1200,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '20px'
+              }}
+            >
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  maxWidth: '420px', width: '100%', background: '#FFFFFF',
+                  borderRadius: '24px', overflow: 'hidden', padding: '20px', textAlign: 'center',
+                  boxShadow: '0 20px 60px rgba(0,0,0,0.3)', maxHeight: '90vh', display: 'flex', flexDirection: 'column'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                  <h4 style={{ fontSize: '1.1rem', fontWeight: 900, color: '#09090B', margin: 0 }}>
+                    Payment Screenshot Proof
+                  </h4>
+                  <button 
+                    onClick={() => setSelectedScreenshot(null)}
+                    style={{ background: '#F4F4F5', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {selectedScreenshot.startsWith('blob:') ? (
+                  <div style={{ padding: '22px 16px', background: '#FEF2F2', borderRadius: '16px', border: '1.5px dashed #FCA5A5', margin: '10px 0' }}>
+                    <AlertCircle size={32} color="#DC2626" style={{ margin: '0 auto 8px' }} />
+                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#991B1B', marginBottom: '6px' }}>
+                      Legacy Device Blob Upload
+                    </div>
+                    <p style={{ fontSize: '0.8rem', color: '#7F1D1D', margin: 0, lineHeight: '1.45' }}>
+                      This screenshot was submitted from an older version as a temporary device blob URL (<code>blob:...</code>) which is only accessible on the submitting user's local phone memory.
+                    </p>
+                    <p style={{ fontSize: '0.78rem', color: '#B91C1C', marginTop: '10px', fontWeight: 700 }}>
+                      ✅ All new payments now automatically upload permanent cross-device Data URLs visible in real time.
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{ flex: 1, minHeight: '260px', maxHeight: '520px', overflow: 'auto', borderRadius: '16px', background: '#F8F9FA', border: '1px solid #E4E4E7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <img 
+                      src={selectedScreenshot} 
+                      alt="Full screenshot proof" 
+                      style={{ maxWidth: '100%', maxHeight: '500px', objectFit: 'contain', borderRadius: '12px' }}
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        if (e.currentTarget.nextSibling) e.currentTarget.nextSibling.style.display = 'block';
+                      }}
+                    />
+                    <div style={{ display: 'none', padding: '24px', color: '#71717A', fontSize: '0.85rem' }}>
+                      Screenshot image unavailable.
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                  {!selectedScreenshot.startsWith('blob:') && (
+                    <a 
+                      href={selectedScreenshot} 
+                      download="payment_proof.jpg"
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{
+                        flex: 1, padding: '12px', borderRadius: '14px', background: '#F4F4F5',
+                        color: '#09090B', textDecoration: 'none', fontWeight: 700, fontSize: '0.88rem',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                      }}
+                    >
+                      Download Image
+                    </a>
+                  )}
+                  <button 
+                    onClick={() => setSelectedScreenshot(null)}
+                    className="btn-black-pill"
+                    style={{ flex: 1, padding: '12px' }}
+                  >
+                    Close Proof
+                  </button>
+                </div>
               </div>
             </div>
           )}

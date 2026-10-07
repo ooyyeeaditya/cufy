@@ -185,27 +185,29 @@ export async function fetchAllCloudUsers() {
         if (!p.email || p.email === 'cupid.livepro@gmail.com') return;
         const mem = memberships ? memberships.find(m => m.user_id === p.id) : null;
         
-        const existingIdx = cloudUsers.findIndex(u => u.email && u.email.toLowerCase() === p.email.toLowerCase());
+        const existing = existingIdx >= 0 ? cloudUsers[existingIdx] : null;
+        const proof = mem?.screenshot_url || existing?.paymentProofUrl || existing?.paymentProof || '/photos/couple1.jpg';
+
         const mapped = {
           id: p.id,
-          name: p.name || 'Member',
-          age: p.age || 24,
-          gender: p.gender || 'Man',
-          city: p.location || 'Greater Noida',
+          name: p.name || existing?.name || 'Member',
+          age: p.age || existing?.age || 24,
+          gender: p.gender || existing?.gender || 'Man',
+          city: p.location || existing?.city || 'Greater Noida',
           email: p.email,
-          phone: p.phone || '+91 9876543210',
-          status: p.is_verified || p.account_status === 'Active' ? 'approved' : 'pending_approval',
-          plan: p.gender === 'Woman' ? 'Free Pass for Women' : '1 Month VIP Pass',
-          registered: p.created_at ? new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Today',
-          photos: p.photos && p.photos.length > 0 ? p.photos : ['/photos/front1.jpg'],
-          paymentProofUrl: mem?.screenshot_url || '/photos/couple1.jpg',
-          matches: [],
+          phone: p.phone || existing?.phone || '+91 9876543210',
+          status: p.is_verified || p.account_status === 'Active' ? 'approved' : (existing?.status || 'pending_approval'),
+          plan: p.gender === 'Woman' ? 'Free Pass for Women' : (existing?.plan || '1 Month VIP Pass'),
+          registered: p.created_at ? new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : (existing?.registered || 'Today'),
+          photos: (p.photos && p.photos.length > 0) ? p.photos : (existing?.photos || ['/photos/front1.jpg']),
+          paymentProofUrl: proof,
+          matches: existing?.matches || [],
           payments: [{
-            plan: p.gender === 'Woman' ? 'Free Pass' : '1 Month Pass',
+            plan: p.gender === 'Woman' ? 'Free Pass' : (existing?.plan || '1 Month Pass'),
             amount: p.gender === 'Woman' ? '₹0' : '₹799',
             date: 'Today',
             status: p.is_verified ? 'Approved' : 'Pending',
-            screenshot: mem?.screenshot_url || '/photos/couple1.jpg'
+            screenshot: proof
           }]
         };
 

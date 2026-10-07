@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronLeft, X, Lock, Camera, Trash2, Plus, Mic, Play, Pause, Check } from 'lucide-react';
 import VoiceRecorderWidget from '../common/VoiceRecorderWidget';
+import { fileToCompressedBase64 } from '../../utils/imageUpload';
 
 export default function EditProfileModal({ isOpen, onClose, userProfile, onSave }) {
   if (!isOpen) return null;
@@ -26,13 +27,17 @@ export default function EditProfileModal({ isOpen, onClose, userProfile, onSave 
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
   const [voiceDuration, setVoiceDuration] = useState('0:14');
 
-  const handlePhotoUpload = (index, event) => {
+  const handlePhotoUpload = async (index, event) => {
     const file = event.target.files?.[0];
     if (file) {
-      const url = URL.createObjectURL(file);
-      const newPhotos = [...photos];
-      newPhotos[index] = url;
-      setPhotos(newPhotos);
+      try {
+        const url = await fileToCompressedBase64(file, 1000, 0.8);
+        const newPhotos = [...photos];
+        newPhotos[index] = url;
+        setPhotos(newPhotos);
+      } catch (err) {
+        console.error('Failed to convert photo in edit profile:', err);
+      }
     }
   };
 
