@@ -245,7 +245,7 @@ export async function fetchAllCloudUsers() {
 
         // STRICT VERIFICATION CHECK:
         // Must be verified in profile OR approved in memberships. account_status defaults to Active and does NOT mean approved!
-        const isVerified = Boolean(p.is_verified || (mem && mem.status === 'approved'));
+        let isVerified = Boolean(p.is_verified || (mem && mem.status === 'approved'));
 
         // Expiration check
         const now = new Date();
@@ -256,11 +256,25 @@ export async function fetchAllCloudUsers() {
           isExpired = true;
         }
 
+        // Check rejection note or status
+        let rejectionReason = existing?.rejectionReason || '';
+        const isDbRejected = mem?.status === 'rejected' || (p.prompt2_answer && p.prompt2_answer.startsWith('[REJECTION]:'));
+        if (p.prompt2_answer && p.prompt2_answer.startsWith('[REJECTION]:')) {
+          rejectionReason = p.prompt2_answer.replace('[REJECTION]:', '').trim();
+        }
+
         let userStatus = 'pending_approval';
         if (p.account_status === 'Suspended') {
           userStatus = 'suspended';
         } else if (isExpired) {
           userStatus = 'expired';
+        } else if (isDbRejected) {
+          userStatus = 'rejected';
+          isVerified = false;
+        } else if (p.gender === 'Woman') {
+          // Auto-approved for women unless suspended or explicitly rejected
+          userStatus = 'approved';
+          isVerified = true;
         } else if (isVerified) {
           userStatus = 'approved';
         } else {
@@ -277,14 +291,22 @@ export async function fetchAllCloudUsers() {
           age: p.age || existing?.age || 24,
           gender: p.gender || existing?.gender || 'Man',
           city: p.location || existing?.city || 'Greater Noida',
+          bio: p.bio || existing?.bio || '',
+          prompt1: p.prompt1 || existing?.prompt1 || '',
+          prompt1_answer: p.prompt1_answer || existing?.prompt1_answer || '',
+          prompt2: p.prompt2 || existing?.prompt2 || '',
+          prompt2_answer: p.prompt2_answer || existing?.prompt2_answer || '',
+          rejectionReason: rejectionReason,
           email: p.email,
           phone: p.phone || existing?.phone || '+91 9876543210',
           status: userStatus,
           is_verified: isVerified,
           plan: planName,
           planDays: planDays,
+          planPrice: p.gender === 'Woman' ? 0 : (mem?.price ? Number(mem.price) : (rawPlan.includes('199') ? 199 : rawPlan.includes('299') ? 299 : rawPlan.includes('499') ? 499 : 799)),
           startsAt: startsAt,
           expiresAt: expiresAt,
+          createdAt: p.created_at || existing?.createdAt || null,
           registered: p.created_at ? new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : (existing?.registered || 'Today'),
           photos: (p.photos && p.photos.length > 0) ? p.photos : (existing?.photos || ['/photos/front1.jpg']),
           paymentProofUrl: proof,
@@ -293,7 +315,7 @@ export async function fetchAllCloudUsers() {
             plan: planName,
             amount: p.gender === 'Woman' ? '₹0 FREE' : (mem?.price ? `₹${mem.price}` : '₹799'),
             date: p.created_at ? new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Today',
-            status: isVerified ? 'Approved' : 'Pending',
+            status: userStatus === 'approved' ? 'Approved' : (userStatus === 'rejected' ? 'Rejected' : 'Pending'),
             screenshot: proof
           }]
         };
@@ -324,6 +346,13 @@ export async function fetchAllCloudUsers() {
     console.log('Local merge note:', err);
   }
 
+  // Strictly sort all users NEWEST to OLDEST (latest registration on top)
+  cloudUsers.sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : (a.registered ? Date.parse(a.registered) || 0 : 0);
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : (b.registered ? Date.parse(b.registered) || 0 : 0);
+    return timeB - timeA;
+  });
+
   return cloudUsers;
 }
 
@@ -335,6 +364,7 @@ export async function updateCloudUserStatus(targetUserId, targetEmail, newStatus
   let startsAt = options.startsAt || null;
   let expiresAt = options.expiresAt || null;
   const durationDays = options.planDays || getPlanDurationDays(options.planName || '1 Month VIP Pass');
+  const rejectionReason = options.rejectionReason || '';
 
   if (newStatus === 'approved') {
     startsAt = startsAt || now.toISOString();
@@ -356,6 +386,11 @@ export async function updateCloudUserStatus(targetUserId, targetEmail, newStatus
           matched.data.startsAt = startsAt;
           matched.data.expiresAt = expiresAt;
           matched.data.planDays = durationDays;
+          if (newStatus === 'rejected') {
+            matched.data.rejectionReason = rejectionReason;
+          } else if (newStatus === 'approved') {
+            matched.data.rejectionReason = '';
+          }
           await fetch(`${REST_CLOUD_API}/${matched.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -370,13 +405,20 @@ export async function updateCloudUserStatus(targetUserId, targetEmail, newStatus
 
   // 2. Update in Supabase profiles
   try {
+    const profileUpdate = {
+      is_verified: newStatus === 'approved',
+      account_status: newStatus === 'suspended' ? 'Suspended' : 'Active',
+      updated_at: now.toISOString()
+    };
+    if (newStatus === 'rejected' && rejectionReason) {
+      profileUpdate.prompt2_answer = `[REJECTION]: ${rejectionReason}`;
+    } else if (newStatus === 'approved') {
+      profileUpdate.prompt2_answer = ''; // clear rejection note
+    }
+
     await supabase
       .from('profiles')
-      .update({
-        is_verified: newStatus === 'approved',
-        account_status: newStatus === 'suspended' ? 'Suspended' : 'Active',
-        updated_at: now.toISOString()
-      })
+      .update(profileUpdate)
       .eq('email', cleanEmail);
   } catch (err) {
     console.log('Supabase profile update error:', err);
@@ -417,6 +459,7 @@ export async function updateCloudUserStatus(targetUserId, targetEmail, newStatus
             ...u,
             status: newStatus,
             is_verified: newStatus === 'approved',
+            rejectionReason: newStatus === 'rejected' ? rejectionReason : '',
             startsAt: startsAt || u.startsAt,
             expiresAt: expiresAt || u.expiresAt,
             planDays: durationDays
@@ -433,6 +476,7 @@ export async function updateCloudUserStatus(targetUserId, targetEmail, newStatus
       if (active.email && active.email.toLowerCase() === cleanEmail) {
         active.status = newStatus;
         active.is_verified = newStatus === 'approved';
+        active.rejectionReason = newStatus === 'rejected' ? rejectionReason : '';
         active.startsAt = startsAt || active.startsAt;
         active.expiresAt = expiresAt || active.expiresAt;
         active.planDays = durationDays;
@@ -447,9 +491,10 @@ export async function updateCloudUserStatus(targetUserId, targetEmail, newStatus
   if (syncChannel) {
     try {
       syncChannel.postMessage({
-        type: 'USER_STATUS_UPDATED',
+        type: newStatus === 'rejected' ? 'USER_REJECTED' : 'USER_STATUS_UPDATED',
         email: cleanEmail,
         status: newStatus,
+        reason: rejectionReason,
         startsAt,
         expiresAt,
         planDays: durationDays
@@ -458,9 +503,99 @@ export async function updateCloudUserStatus(targetUserId, targetEmail, newStatus
   }
 
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('cufy_user_approved', {
-      detail: { email: cleanEmail, status: newStatus, startsAt, expiresAt, planDays: durationDays }
-    }));
+    if (newStatus === 'rejected') {
+      window.dispatchEvent(new CustomEvent('cufy_user_rejected', {
+        detail: { email: cleanEmail, status: 'rejected', reason: rejectionReason }
+      }));
+    } else {
+      window.dispatchEvent(new CustomEvent('cufy_user_approved', {
+        detail: { email: cleanEmail, status: newStatus, startsAt, expiresAt, planDays: durationDays }
+      }));
+    }
+  }
+}
+
+// Helper: Re-submit verification for rejected member
+export async function reSubmitVerification(userEmail, newPaymentProofUrl = null, updatedFields = {}) {
+  const cleanEmail = sanitizeEmail(userEmail);
+  const now = new Date();
+
+  // 1. Supabase profiles update
+  try {
+    const pUpdate = {
+      is_verified: false,
+      account_status: 'Active',
+      prompt2_answer: '',
+      updated_at: now.toISOString(),
+      ...updatedFields
+    };
+    await supabase.from('profiles').update(pUpdate).eq('email', cleanEmail);
+  } catch (e) {
+    console.error('Supabase profile re-submit error:', e);
+  }
+
+  // 2. Supabase memberships update
+  try {
+    const { data: prof } = await supabase.from('profiles').select('id').eq('email', cleanEmail).maybeSingle();
+    if (prof?.id) {
+      const mUpdate = { status: 'pending' };
+      if (newPaymentProofUrl) mUpdate.screenshot_url = newPaymentProofUrl;
+      await supabase.from('memberships').update(mUpdate).eq('user_id', prof.id);
+    }
+  } catch (e) {
+    console.error('Supabase membership re-submit error:', e);
+  }
+
+  // 3. Update localStorage
+  try {
+    const activeStr = localStorage.getItem('cufy_active_user');
+    if (activeStr) {
+      const active = JSON.parse(activeStr);
+      if (active.email && active.email.toLowerCase() === cleanEmail) {
+        active.status = 'pending_approval';
+        active.is_verified = false;
+        active.rejectionReason = '';
+        if (newPaymentProofUrl) {
+          active.paymentProofUrl = newPaymentProofUrl;
+          active.paymentProof = newPaymentProofUrl;
+        }
+        Object.assign(active, updatedFields);
+        localStorage.setItem('cufy_active_user', JSON.stringify(active));
+      }
+    }
+
+    const dbStr = localStorage.getItem('cufy_registered_users');
+    if (dbStr) {
+      let dbUsers = JSON.parse(dbStr);
+      dbUsers = dbUsers.map(u => {
+        if (u.email && u.email.toLowerCase() === cleanEmail) {
+          return {
+            ...u,
+            status: 'pending_approval',
+            is_verified: false,
+            rejectionReason: '',
+            paymentProofUrl: newPaymentProofUrl || u.paymentProofUrl,
+            ...updatedFields
+          };
+        }
+        return u;
+      });
+      localStorage.setItem('cufy_registered_users', JSON.stringify(dbUsers));
+    }
+  } catch (e) {}
+
+  // 4. Broadcast to other tabs & window
+  if (syncChannel) {
+    try {
+      syncChannel.postMessage({
+        type: 'VERIFICATION_RESUBMITTED',
+        email: cleanEmail,
+        screenshotUrl: newPaymentProofUrl
+      });
+    } catch (e) {}
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('cufy_verification_resubmitted', { detail: { email: cleanEmail } }));
   }
 }
 

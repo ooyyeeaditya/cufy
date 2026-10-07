@@ -247,7 +247,7 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
           planPrice: formData.gender === 'Woman' ? 0 : selectedPlan.price,
           planDays: planDays,
           paymentProofUrl,
-          status: 'pending_approval'
+          status: formData.gender === 'Woman' ? 'approved' : 'pending_approval'
         };
         onCompleteOnboarding(completedData);
       }, 1000);

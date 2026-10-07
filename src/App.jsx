@@ -20,6 +20,7 @@ import FilterModal from './components/app/FilterModal';
 import NotificationDrawer from './components/app/NotificationDrawer';
 import AdminPanel from './components/app/AdminPanel';
 import MembershipExpiredModal from './components/app/MembershipExpiredModal';
+import VerificationRejectedModal from './components/app/VerificationRejectedModal';
 
 import { INITIAL_DAILY_MATCH } from './data/mockProfiles';
 import { analytics } from './utils/analytics';
@@ -217,13 +218,40 @@ export default function App() {
       }
     };
 
+    const handleRejectedEvent = (e) => {
+      const detail = e?.detail;
+      const currentEmail = userProfile?.email?.toLowerCase().trim();
+      if (!detail || !detail.email || (currentEmail && detail.email.toLowerCase() === currentEmail)) {
+        const reason = detail?.reason || 'Verification details could not be verified by admin.';
+        const rejectedUser = {
+          ...userProfile,
+          status: 'rejected',
+          is_verified: false,
+          rejectionReason: reason
+        };
+        setUserProfile(rejectedUser);
+        localStorage.setItem('cufy_active_user', JSON.stringify(rejectedUser));
+
+        if ('Notification' in window && Notification.permission === 'granted') {
+          try {
+            new Notification('⚠️ Verification Rejected', {
+              body: `Reason: ${reason}. Tap to fix and re-upload.`,
+              icon: '/photos/cufylogo.jpg'
+            });
+          } catch (nErr) {}
+        }
+      }
+    };
+
     window.addEventListener('cufy_user_approved', handleApprovedEvent);
+    window.addEventListener('cufy_user_rejected', handleRejectedEvent);
     return () => {
       window.removeEventListener('cufy_user_approved', handleApprovedEvent);
+      window.removeEventListener('cufy_user_rejected', handleRejectedEvent);
     };
   }, [userProfile]);
 
-  // Real-time polling when account is pending approval (unlocks automatically in ~3s once Admin approves!)
+  // Real-time polling when account is pending approval (unlocks automatically in ~3s once Admin approves or alerts if rejected!)
   useEffect(() => {
     const isPending = userProfile && (userProfile.status === 'pending_approval' || userProfile.status === 'pending') && !userProfile.isAdmin;
     if (!isPending || !userProfile?.email || !supabase) return;
@@ -233,19 +261,47 @@ export default function App() {
         const cleanEmail = userProfile.email.toLowerCase().trim();
         const { data: dbProf } = await supabase
           .from('profiles')
-          .select('id, is_verified, account_status')
+          .select('id, is_verified, account_status, prompt2_answer')
           .eq('email', cleanEmail)
           .maybeSingle();
 
-        if (dbProf && dbProf.is_verified) {
-          const { data: mem } = await supabase
-            .from('memberships')
-            .select('*')
-            .eq('user_id', dbProf.id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+        const { data: mem } = await supabase
+          .from('memberships')
+          .select('*')
+          .eq('user_id', dbProf?.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
+        // 1. Check if rejected
+        const isDbRejected = mem?.status === 'rejected' || (dbProf?.prompt2_answer && dbProf.prompt2_answer.startsWith('[REJECTION]:'));
+        if (isDbRejected) {
+          let reason = 'Payment receipt or profile information could not be verified.';
+          if (dbProf?.prompt2_answer && dbProf.prompt2_answer.startsWith('[REJECTION]:')) {
+            reason = dbProf.prompt2_answer.replace('[REJECTION]:', '').trim();
+          }
+          const rejectedUser = {
+            ...userProfile,
+            status: 'rejected',
+            is_verified: false,
+            rejectionReason: reason
+          };
+          setUserProfile(rejectedUser);
+          localStorage.setItem('cufy_active_user', JSON.stringify(rejectedUser));
+
+          if ('Notification' in window && Notification.permission === 'granted') {
+            try {
+              new Notification('⚠️ Verification Rejected', {
+                body: `Reason: ${reason}. Tap to fix and re-upload.`,
+                icon: '/photos/cufylogo.jpg'
+              });
+            } catch (nErr) {}
+          }
+          return;
+        }
+
+        // 2. Check if approved
+        if (dbProf && (dbProf.is_verified || mem?.status === 'approved')) {
           const now = new Date();
           const startsAt = mem?.starts_at || now.toISOString();
           const expiresAt = mem?.expires_at || new Date(now.getTime() + 30 * 86400000).toISOString();
@@ -493,6 +549,8 @@ export default function App() {
 
   const isPendingApproval = userProfile && (userProfile.status === 'pending_approval' || userProfile.status === 'pending') && !userProfile.isAdmin;
 
+  const isVerificationRejected = userProfile && userProfile.status === 'rejected' && !userProfile.isAdmin;
+
   const isMembershipExpired = Boolean(
     userProfile &&
     !userProfile.isAdmin &&
@@ -567,6 +625,15 @@ export default function App() {
                   onRenewSubmitted={(renewedUser) => {
                     setUserProfile(renewedUser);
                     localStorage.setItem('cufy_active_user', JSON.stringify(renewedUser));
+                  }}
+                  onLogout={handleLogout}
+                />
+              ) : isVerificationRejected ? (
+                <VerificationRejectedModal
+                  userProfile={userProfile}
+                  onResubmitted={(updatedUser) => {
+                    setUserProfile(updatedUser);
+                    localStorage.setItem('cufy_active_user', JSON.stringify(updatedUser));
                   }}
                   onLogout={handleLogout}
                 />
