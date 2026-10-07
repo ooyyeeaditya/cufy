@@ -27,6 +27,7 @@ import { analytics } from './utils/analytics';
 import { syncUserToCloud, formatPlanName, getPlanDurationDays } from './lib/cloudSync';
 import { supabase } from './lib/supabase';
 import { Clock, ShieldCheck, Sparkles, RefreshCw, X, LogOut, ShieldAlert } from 'lucide-react';
+import { sendNativeNotification } from './utils/notifications';
 
 import './styles/index.css';
 
@@ -238,6 +239,16 @@ export default function App() {
     }
   }, []);
 
+  // Request notification permission gracefully so Android status bar receives alerts
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      const timer = setTimeout(() => {
+        Notification.requestPermission().catch(() => {});
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
   // Listen for real-time approval, rejection, and deletion events across tabs/window
   useEffect(() => {
     const handleApprovedEvent = (e) => {
@@ -265,14 +276,11 @@ export default function App() {
         setUserProfile(rejectedUser);
         localStorage.setItem('cufy_active_user', JSON.stringify(rejectedUser));
 
-        if ('Notification' in window && Notification.permission === 'granted') {
-          try {
-            new Notification('⚠️ Access Revoked / Rejected', {
-              body: `Reason: ${reason}. Tap to fix and re-upload.`,
-              icon: '/photos/cufylogo.jpg'
-            });
-          } catch (nErr) {}
-        }
+        sendNativeNotification(
+          '⚠️ Profile Verification Update',
+          `Reason: ${reason}. Tap to fix and re-upload.`,
+          { tag: 'cufy-rejected' }
+        );
       }
     };
 
@@ -316,14 +324,11 @@ export default function App() {
           localStorage.removeItem('cufy_active_user');
           setUserProfile(null);
           setViewState('welcome');
-          if ('Notification' in window && Notification.permission === 'granted') {
-            try {
-              new Notification('Account Removed', {
-                body: 'Your Cufy profile has been permanently removed by administrator.',
-                icon: '/photos/cufylogo.jpg'
-              });
-            } catch (nErr) {}
-          }
+          sendNativeNotification(
+            '🚫 Account Removed',
+            'Your Cufy profile has been permanently removed by administrator.',
+            { tag: 'cufy-removed' }
+          );
           alert('Your account has been deleted by administrator.');
           return;
         }
@@ -334,14 +339,11 @@ export default function App() {
             const suspendedUser = { ...userProfile, status: 'suspended', is_verified: false };
             setUserProfile(suspendedUser);
             localStorage.setItem('cufy_active_user', JSON.stringify(suspendedUser));
-            if ('Notification' in window && Notification.permission === 'granted') {
-              try {
-                new Notification('🚫 Account Suspended', {
-                  body: 'Your profile has been deactivated by administrator.',
-                  icon: '/photos/cufylogo.jpg'
-                });
-              } catch (nErr) {}
-            }
+            sendNativeNotification(
+              '🚫 Account Deactivated',
+              'Your profile has been deactivated by administrator.',
+              { tag: 'cufy-suspended' }
+            );
             alert('🚫 Account Notice: Your profile has been deactivated by administrator.');
           }
           return;
@@ -380,14 +382,11 @@ export default function App() {
             setUserProfile(rejectedUser);
             localStorage.setItem('cufy_active_user', JSON.stringify(rejectedUser));
 
-            if ('Notification' in window && Notification.permission === 'granted') {
-              try {
-                new Notification('⚠️ Access Revoked / Rejected', {
-                  body: `Reason: ${reason}. Tap to fix and re-upload.`,
-                  icon: '/photos/cufylogo.jpg'
-                });
-              } catch (nErr) {}
-            }
+            sendNativeNotification(
+              '⚠️ Profile Verification Update',
+              `Reason: ${reason}. Tap to fix and re-upload.`,
+              { tag: 'cufy-rejected' }
+            );
           }
           return;
         }
@@ -844,6 +843,12 @@ export default function App() {
                   onResubmitted={(updatedUser) => {
                     setUserProfile(updatedUser);
                     localStorage.setItem('cufy_active_user', JSON.stringify(updatedUser));
+                  }}
+                  onEditFullProfile={() => {
+                    handleStartOnboarding({
+                      ...userProfile,
+                      authType: 'edit_rejected'
+                    });
                   }}
                   onLogout={handleLogout}
                 />
