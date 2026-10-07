@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Send, ShieldCheck, CheckCheck, Bell, MessageSquare } from 'lucide-react';
 import { HOME_SWIPE_PROFILES } from '../../data/mockProfiles';
 
-export default function ChatDrawer({ matchProfile, onBack }) {
+export default function ChatDrawer({ matchProfile, onBack, userProfile }) {
   // Chat Logs State - Safe initialization without dummy profiles
   const [conversations, setConversations] = useState([
     {
@@ -153,7 +153,18 @@ export default function ChatDrawer({ matchProfile, onBack }) {
               </div>
 
               <div style={{ width: '38px', height: '38px', borderRadius: '50%', overflow: 'hidden', border: '2px solid #FFFFFF' }}>
-                <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=80" alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                {userProfile?.photos?.[0] || userProfile?.photo ? (
+                  <img 
+                    src={userProfile?.photos?.[0] || userProfile?.photo} 
+                    alt={userProfile?.name || 'Profile'} 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }} 
+                  />
+                ) : (
+                  <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #FF3B30, #FF6B6B)', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '0.9rem' }}>
+                    {(userProfile?.name || 'C').charAt(0).toUpperCase()}
+                  </div>
+                )}
               </div>
             </div>
           </div>

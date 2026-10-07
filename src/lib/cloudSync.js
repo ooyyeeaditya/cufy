@@ -26,6 +26,18 @@ export function formatPlanName(plan) {
   return plan;
 }
 
+// Helper: Minimal simplified plan badge for spacious clean UI (e.g. ₹799 Plan)
+export function getSimplifiedPlanBadge(plan, amount, gender) {
+  if (gender === 'Woman') return 'Free (Women)';
+  const p = (plan || '').toString().toLowerCase();
+  if (p.includes('799') || p.includes('month') || p.includes('vip')) return '₹799 Plan';
+  if (p.includes('499') || p.includes('15')) return '₹499 Plan';
+  if (p.includes('299') || p.includes('week')) return '₹299 Plan';
+  if (p.includes('199') || p.includes('day')) return '₹199 Plan';
+  if (amount && amount.toString().includes('₹')) return `${amount} Plan`;
+  return '₹799 Plan';
+}
+
 // Generate valid RFC4122 UUID v4 for Supabase compatibility
 function generateUUID() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -82,15 +94,15 @@ export async function syncUserToCloud(record) {
     startsAt: record.startsAt || null,
     expiresAt: record.expiresAt || null,
     registered: record.registered || new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
-    photos: (record.photos && record.photos.filter(p => Boolean(p)).length > 0) ? record.photos : ['/photos/front1.jpg'],
-    paymentProofUrl: record.paymentProofUrl || record.paymentProof || '/photos/couple1.jpg',
+    photos: (record.photos && record.photos.filter(p => Boolean(p)).length > 0) ? record.photos.filter(Boolean) : [],
+    paymentProofUrl: record.paymentProofUrl || record.paymentProof || null,
     matches: record.matches || [],
     payments: record.payments || [{
       plan: planName,
       amount: record.gender === 'Woman' ? '₹0 FREE' : (record.planPrice ? `₹${record.planPrice}` : '₹799'),
       date: 'Today',
       status: record.status === 'approved' ? 'Approved' : 'Pending',
-      screenshot: record.paymentProofUrl || record.paymentProof || '/photos/couple1.jpg'
+      screenshot: record.paymentProofUrl || record.paymentProof || null
     }]
   };
 
@@ -241,7 +253,7 @@ export async function fetchAllCloudUsers() {
         
         const existingIdx = cloudUsers.findIndex(cu => cu.email && cu.email.toLowerCase() === cleanEmail);
         const existing = existingIdx >= 0 ? cloudUsers[existingIdx] : null;
-        const proof = mem?.screenshot_url || existing?.paymentProofUrl || existing?.paymentProof || '/photos/couple1.jpg';
+        const proof = mem?.screenshot_url || existing?.paymentProofUrl || existing?.paymentProof || null;
 
         // STRICT VERIFICATION CHECK:
         // Must be verified in profile OR approved in memberships. account_status defaults to Active and does NOT mean approved!
@@ -308,7 +320,7 @@ export async function fetchAllCloudUsers() {
           expiresAt: expiresAt,
           createdAt: p.created_at || existing?.createdAt || null,
           registered: p.created_at ? new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : (existing?.registered || 'Today'),
-          photos: (p.photos && p.photos.length > 0) ? p.photos : (existing?.photos || ['/photos/front1.jpg']),
+          photos: (p.photos && Array.isArray(p.photos) && p.photos.filter(Boolean).length > 0) ? p.photos.filter(Boolean) : (existing?.photos && existing.photos.filter(Boolean).length > 0 ? existing.photos.filter(Boolean) : []),
           paymentProofUrl: proof,
           matches: existing?.matches || [],
           payments: [{
@@ -664,7 +676,7 @@ export async function backfillAllUsersToSupabase() {
           location: user.city || 'Greater Noida',
           account_status: user.status === 'suspended' ? 'Suspended' : 'Active',
           is_verified: isApproved,
-          photos: user.photos || ['/photos/front1.jpg'],
+          photos: (user.photos && Array.isArray(user.photos) && user.photos.filter(Boolean).length > 0) ? user.photos.filter(Boolean) : [],
           is_admin: Boolean(user.isAdmin)
         }, { onConflict: 'email' });
 

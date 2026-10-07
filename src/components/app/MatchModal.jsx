@@ -1,7 +1,7 @@
 import React from 'react';
 import { Heart, MessageSquare, X } from 'lucide-react';
 
-export default function MatchModal({ matchProfile, onSendMessage, onClose }) {
+export default function MatchModal({ matchProfile, onSendMessage, onClose, userProfile }) {
   if (!matchProfile) return null;
 
   return (
@@ -77,11 +77,18 @@ export default function MatchModal({ matchProfile, onSendMessage, onClose }) {
           marginRight: '-20px',
           zIndex: 10
         }}>
-          <img 
-            src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=80" 
-            alt="Your portrait" 
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
+          {userProfile?.photos?.[0] || userProfile?.photo ? (
+            <img 
+              src={userProfile?.photos?.[0] || userProfile?.photo} 
+              alt={userProfile?.name || "Your portrait"} 
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              onError={(e) => { e.currentTarget.src = '/photos/cupidlogo.jpg'; }}
+            />
+          ) : (
+            <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #FF3B30, #FF6B6B)', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '2.4rem' }}>
+              {(userProfile?.name || 'C').charAt(0).toUpperCase()}
+            </div>
+          )}
         </div>
 
         {/* Center Glowing Heart Badge */}

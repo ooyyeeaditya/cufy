@@ -181,7 +181,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
               age: dbProfile.age || 24,
               city: dbProfile.location || 'New Delhi',
               status: dbProfile.is_verified ? 'approved' : 'pending_approval',
-              photos: dbProfile.photos && dbProfile.photos.length > 0 ? dbProfile.photos : [photo || '/photos/front1.jpg'],
+              photos: dbProfile.photos && dbProfile.photos.length > 0 ? dbProfile.photos : (photo ? [photo] : []),
               registered: dbProfile.created_at ? new Date(dbProfile.created_at).toLocaleDateString() : 'Today'
             };
             try {

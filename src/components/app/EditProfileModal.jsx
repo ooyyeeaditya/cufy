@@ -17,11 +17,17 @@ export default function EditProfileModal({ isOpen, onClose, userProfile, onSave 
   const [education, setEducation] = useState(userProfile?.education || 'Bachelor');
   const [religion, setReligion] = useState(userProfile?.religion || 'Agnostic');
 
+  const userPhotoList = Array.isArray(userProfile?.photos) 
+    ? userProfile.photos.filter(Boolean) 
+    : (userProfile?.photo ? [userProfile.photo] : []);
+
   const [photos, setPhotos] = useState([
-    userProfile?.photos?.[0] || '/photos/couple1.jpg',
-    userProfile?.photos?.[1] || '/photos/couple2.jpg',
-    userProfile?.photos?.[2] || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=80',
-    '', '', ''
+    userPhotoList[0] || '',
+    userPhotoList[1] || '',
+    userPhotoList[2] || '',
+    userPhotoList[3] || '',
+    userPhotoList[4] || '',
+    userPhotoList[5] || ''
   ]);
 
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
@@ -31,7 +37,7 @@ export default function EditProfileModal({ isOpen, onClose, userProfile, onSave 
     const file = event.target.files?.[0];
     if (file) {
       try {
-        const url = await fileToCompressedBase64(file, 1000, 0.8);
+        const url = await fileToCompressedBase64(file, 640, 0.72);
         const newPhotos = [...photos];
         newPhotos[index] = url;
         setPhotos(newPhotos);

@@ -72,10 +72,12 @@ export default function App() {
         status: user.status || 'pending_approval',
         plan: user.plan || (user.gender === 'Woman' ? 'Free Pass for Women' : '1 Month VIP Pass'),
         registered: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
-        photos: (user.photos && user.photos.filter(p => Boolean(p)).length > 0) ? user.photos : ['/photos/front1.jpg'],
-        paymentProofUrl: user.paymentProofUrl || user.paymentProof || '/photos/couple1.jpg',
+        photos: (user.photos && Array.isArray(user.photos) && user.photos.filter(Boolean).length > 0) ? user.photos.filter(Boolean) : (user.photo ? [user.photo] : []),
+        boostCredits: user.boostCredits !== undefined ? user.boostCredits : (user.plan?.includes('799') || user.plan?.includes('month') || user.plan?.includes('VIP') ? 1 : 0),
+        boostActiveUntil: user.boostActiveUntil || null,
+        paymentProofUrl: user.paymentProofUrl || user.paymentProof || null,
         matches: user.matches || [],
-        payments: user.payments || [{ plan: user.plan || '1 Month Pass', amount: '₹799', date: 'Today', status: user.status === 'approved' ? 'Approved' : 'Pending', screenshot: user.paymentProofUrl || '/photos/couple1.jpg' }]
+        payments: user.payments || [{ plan: user.plan || '1 Month Pass', amount: '₹799', date: 'Today', status: user.status === 'approved' ? 'Approved' : 'Pending', screenshot: user.paymentProofUrl || null }]
       };
 
       if (existingIdx >= 0) {
@@ -470,7 +472,7 @@ export default function App() {
             startsAt: mem?.starts_at || null,
             expiresAt: mem?.expires_at || null,
             plan: mem?.plan_type ? formatPlanName(mem.plan_type) : (dbProfile.gender === 'Woman' ? 'Free Pass for Women' : '1 Month VIP Pass'),
-            photos: dbProfile.photos && dbProfile.photos.length > 0 ? dbProfile.photos : [photo || '/photos/front1.jpg'],
+            photos: dbProfile.photos && dbProfile.photos.length > 0 ? dbProfile.photos : (photo ? [photo] : []),
             registered: dbProfile.created_at ? new Date(dbProfile.created_at).toLocaleDateString() : 'Today'
           };
           try {
@@ -699,6 +701,8 @@ export default function App() {
                   {/* Home Tab: Swipeable Profile Deck */}
                   {appTab === 'home' && (
                     <SwipeableHomeFeed 
+                      userProfile={userProfile}
+                      onUpdateProfile={handleUpdateProfile}
                       onOpenChat={handleOpenChat}
                       onSelectProfile={handleSelectProfile}
                       onOpenFilters={() => setIsFilterOpen(true)}
@@ -730,6 +734,7 @@ export default function App() {
                     <ChatDrawer 
                       matchProfile={activeChatMatch}
                       onBack={() => handleTabChange('home')}
+                      userProfile={userProfile}
                     />
                   )}
 
@@ -815,6 +820,7 @@ export default function App() {
                   matchProfile={matchedProfile}
                   onSendMessage={handleSendMessageFromMatch}
                   onClose={() => setMatchedProfile(null)}
+                  userProfile={userProfile}
                 />
               )}
 

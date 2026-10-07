@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Heart, X, Star, Zap, Sliders, Bell, Home, MapPin, Compass, GraduationCap, Award, RefreshCw, Mic, Play, Pause, Volume2 } from 'lucide-react';
+import { Heart, X, Star, Zap, Sliders, Bell, Home, MapPin, Compass, GraduationCap, Award, RefreshCw, Mic, Play, Pause, Volume2, Camera, Check } from 'lucide-react';
 import { HOME_SWIPE_PROFILES } from '../../data/mockProfiles';
+import { fileToCompressedBase64 } from '../../utils/imageUpload';
 
 export default function SwipeableHomeFeed({ 
   onOpenChat, 
@@ -8,11 +9,55 @@ export default function SwipeableHomeFeed({
   onOpenFilters, 
   onOpenNotifications, 
   onOpenSettings,
-  onTriggerMatch 
+  onTriggerMatch,
+  userProfile,
+  onUpdateProfile
 }) {
   const [deck, setDeck] = useState(HOME_SWIPE_PROFILES);
   const [glideClass, setGlideClass] = useState('');
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
+
+  // Boost States & Flow
+  const [showBoostConfirmModal, setShowBoostConfirmModal] = useState(false);
+  const [showBoostPurchaseModal, setShowBoostPurchaseModal] = useState(false);
+  const [boostToast, setBoostToast] = useState('');
+  const [boostScreenshot, setBoostScreenshot] = useState(null);
+  const [isUploadingBoostProof, setIsUploadingBoostProof] = useState(false);
+  const [selectedBoostPack, setSelectedBoostPack] = useState({ title: '1 Boost', price: 149 });
+
+  const isBoostLive = Boolean(userProfile?.boostActiveUntil && new Date(userProfile.boostActiveUntil) > new Date());
+  const boostCredits = userProfile?.boostCredits || 0;
+
+  const handleZapClick = () => {
+    if (isBoostLive) {
+      const exp = new Date(userProfile.boostActiveUntil);
+      const diffHours = Math.max(1, Math.round((exp - new Date()) / (1000 * 60 * 60)));
+      setBoostToast(`⚡ Boost is currently Active! ~${diffHours}h left. Profile is at top of feed.`);
+      setTimeout(() => setBoostToast(''), 3500);
+      return;
+    }
+
+    if (boostCredits > 0) {
+      setShowBoostConfirmModal(true);
+    } else {
+      setShowBoostPurchaseModal(true);
+    }
+  };
+
+  const handleConfirmActivateBoost = () => {
+    const activeUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const updated = {
+      ...userProfile,
+      boostActiveUntil: activeUntil,
+      boostCredits: Math.max(0, boostCredits - 1)
+    };
+    if (onUpdateProfile) {
+      onUpdateProfile(updated);
+    }
+    setShowBoostConfirmModal(false);
+    setBoostToast('⚡ Boost Activated! Your profile is at the top of every girl\'s feed for 24 hours.');
+    setTimeout(() => setBoostToast(''), 4000);
+  };
 
   const currentProfile = deck[0];
 
@@ -141,18 +186,32 @@ export default function SwipeableHomeFeed({
               height: '40px',
               borderRadius: '50%',
               overflow: 'hidden',
-              border: '2px solid #FFFFFF',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              border: isBoostLive ? '2px solid #FF3B30' : '2px solid #FFFFFF',
+              boxShadow: isBoostLive ? '0 0 12px rgba(255,59,48,0.5)' : '0 2px 8px rgba(0,0,0,0.1)',
               padding: 0,
-              cursor: 'pointer'
+              cursor: 'pointer',
+              position: 'relative'
             }}
             aria-label="User Profile & Settings"
+            title={userProfile?.name ? `${userProfile.name}'s Profile` : 'Settings'}
           >
-            <img 
-              src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=80" 
-              alt="User profile DP" 
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            />
+            {userProfile?.photos?.[0] || userProfile?.photo ? (
+              <img 
+                src={userProfile?.photos?.[0] || userProfile?.photo} 
+                alt={userProfile?.name || "User profile DP"} 
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
+            ) : (
+              <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #FF3B30, #FF6B6B)', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '1rem' }}>
+                {(userProfile?.name || 'C').charAt(0).toUpperCase()}
+              </div>
+            )}
+            {isBoostLive && (
+              <span style={{ position: 'absolute', bottom: 0, right: 0, width: '12px', height: '12px', background: '#FF3B30', borderRadius: '50%', border: '1.5px solid #FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '8px' }}>
+                ⚡
+              </span>
+            )}
           </button>
         </div>
       </div>
@@ -462,22 +521,24 @@ export default function SwipeableHomeFeed({
           border: '1.5px solid rgba(255, 255, 255, 0.95)',
           boxShadow: '0 16px 36px rgba(0, 0, 0, 0.12)'
         }}>
-          {/* 1. Boost Button */}
+          {/* 1. Boost Lightning Button */}
           <button 
-            onClick={() => handleNextProfile('boost')}
+            onClick={handleZapClick}
             style={{
               width: '56px',
               height: '56px',
               borderRadius: '20px',
-              background: '#09090B',
+              background: isBoostLive ? '#FFF0F0' : '#09090B',
               color: '#FF3B30',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 6px 18px rgba(0,0,0,0.18)',
+              boxShadow: isBoostLive ? '0 0 18px rgba(255,59,48,0.45)' : '0 6px 18px rgba(0,0,0,0.18)',
+              border: isBoostLive ? '2px solid #FF3B30' : 'none',
               transition: 'transform 0.2s var(--ease-spring)'
             }}
             aria-label="Boost profile"
+            title={isBoostLive ? "Boost is Live (24h)" : "Get a Profile Boost"}
           >
             <Zap size={26} fill="#FF3B30" stroke="#FF3B30" />
           </button>
@@ -541,6 +602,268 @@ export default function SwipeableHomeFeed({
           >
             <Star size={26} fill="#09090B" stroke="#09090B" />
           </button>
+        </div>
+      )}
+
+      {/* FLOATING BOOST TOAST NOTIFICATION */}
+      {boostToast && (
+        <div style={{
+          position: 'fixed',
+          top: '76px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: '#09090B',
+          color: '#FFFFFF',
+          padding: '12px 20px',
+          borderRadius: '18px',
+          fontSize: '0.85rem',
+          fontWeight: 800,
+          boxShadow: '0 12px 32px rgba(0,0,0,0.3)',
+          zIndex: 1000,
+          maxWidth: '350px',
+          textAlign: 'center',
+          border: '1px solid rgba(255,255,255,0.15)'
+        }} className="animate-fade-in">
+          {boostToast}
+        </div>
+      )}
+
+      {/* BOOST CONFIRMATION MODAL (EXPLICIT USER CONFIRMATION BEFORE ACTIVATION) */}
+      {showBoostConfirmModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(9, 9, 11, 0.78)',
+          backdropFilter: 'blur(16px)',
+          zIndex: 1200,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px'
+        }}>
+          <div style={{
+            width: '100%',
+            maxWidth: '380px',
+            background: '#FFFFFF',
+            borderRadius: '28px',
+            padding: '28px 24px',
+            textAlign: 'center',
+            boxShadow: '0 24px 60px rgba(0,0,0,0.25)',
+            border: '1.5px solid #E4E4E7'
+          }} className="animate-fade-in">
+            <div style={{
+              width: '64px',
+              height: '64px',
+              borderRadius: '20px',
+              background: '#FFF0F0',
+              color: '#FF3B30',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px',
+              boxShadow: '0 8px 20px rgba(255,59,48,0.2)'
+            }}>
+              <Zap size={34} fill="#FF3B30" />
+            </div>
+
+            <h3 style={{ fontSize: '1.35rem', fontWeight: 900, color: '#09090B', marginBottom: '8px' }}>
+              ⚡ Boost Activation Confirm
+            </h3>
+
+            <div style={{
+              background: '#F9F8F6',
+              borderRadius: '16px',
+              padding: '14px 16px',
+              marginBottom: '20px',
+              border: '1px solid #E4E4E7',
+              textAlign: 'left'
+            }}>
+              <p style={{ fontSize: '0.88rem', fontWeight: 700, color: '#09090B', lineHeight: '1.45', margin: 0 }}>
+                Boost chala dein? Yeh <b>24 hours</b> ke liye active rhega and har ladki ke top pr aapki profile jaaegi.
+              </p>
+              <div style={{ fontSize: '0.75rem', color: '#71717A', marginTop: '6px', fontWeight: 600 }}>
+                ✓ 1 Boost credit will be used ({boostCredits} available)
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button 
+                onClick={handleConfirmActivateBoost}
+                className="btn-primary" 
+                style={{ width: '100%', padding: '14px', fontSize: '0.92rem' }}
+              >
+                ⚡ Yes, Activate Boost (24h)
+              </button>
+
+              <button 
+                onClick={() => setShowBoostConfirmModal(false)}
+                className="btn-secondary" 
+                style={{ width: '100%', padding: '12px' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BOOST PURCHASE MODAL (PAYMENT REQUIRED BEFORE BOOST) */}
+      {showBoostPurchaseModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(9, 9, 11, 0.78)',
+          backdropFilter: 'blur(16px)',
+          zIndex: 1200,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px'
+        }}>
+          <div style={{
+            width: '100%',
+            maxWidth: '380px',
+            background: '#FFFFFF',
+            borderRadius: '28px',
+            padding: '26px 22px',
+            textAlign: 'center',
+            boxShadow: '0 24px 60px rgba(0,0,0,0.25)',
+            border: '1.5px solid #E4E4E7',
+            maxHeight: '92vh',
+            overflowY: 'auto'
+          }} className="animate-fade-in">
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '18px',
+              background: '#FFF0F0',
+              color: '#FF3B30',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 12px'
+            }}>
+              <Zap size={30} fill="#FF3B30" />
+            </div>
+
+            <h3 style={{ fontSize: '1.35rem', fontWeight: 900, color: '#09090B', marginBottom: '6px' }}>
+              ⚡ Get a Profile Boost
+            </h3>
+
+            <p style={{ fontSize: '0.82rem', color: '#71717A', marginBottom: '16px', lineHeight: 1.4 }}>
+              Payment ke baad hi boost milta hai. Select a pack, transfer via UPI, and submit your payment screenshot for admin verification.
+            </p>
+
+            {/* Pricing Packs */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px' }}>
+              {[
+                { title: '1 Boost', price: 149 },
+                { title: '4 Boosts', price: 399, popular: true },
+                { title: '15 Boosts', price: 799 }
+              ].map((b, i) => {
+                const isSelected = selectedBoostPack.price === b.price;
+                return (
+                  <div 
+                    key={i} 
+                    onClick={() => setSelectedBoostPack(b)}
+                    style={{
+                      padding: '10px 6px',
+                      borderRadius: '16px',
+                      border: isSelected ? '2px solid #FF3B30' : '1.5px solid #E4E4E7',
+                      background: isSelected ? '#FFF0F0' : '#FAFAFA',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div style={{ fontSize: '0.74rem', fontWeight: 800, color: '#09090B' }}>{b.title}</div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#FF3B30', marginTop: '2px' }}>₹{b.price}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* UPI Deep Link Action Button */}
+            <button 
+              onClick={() => {
+                window.location.href = `upi://pay?pa=aditya.378@superyes&pn=Cufy%20Boost&am=${selectedBoostPack.price}&cu=INR`;
+              }}
+              className="btn-primary" 
+              style={{ width: '100%', padding: '13px', marginBottom: '12px', fontSize: '0.9rem' }}
+            >
+              Pay ₹{selectedBoostPack.price} via UPI
+            </button>
+
+            {/* Screenshot Upload Dropzone */}
+            <label style={{
+              display: 'block',
+              padding: '14px',
+              border: boostScreenshot ? '2px solid #10B981' : '2px dashed #CBD5E1',
+              borderRadius: '16px',
+              cursor: 'pointer',
+              background: boostScreenshot ? '#F0FDF4' : '#F9F8F6',
+              marginBottom: '14px',
+              transition: 'all 0.2s ease'
+            }}>
+              {isUploadingBoostProof ? (
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#71717A' }}>Compressing screenshot...</span>
+              ) : boostScreenshot ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', color: '#059669', fontWeight: 800, fontSize: '0.82rem' }}>
+                  <Check size={16} /> Screenshot Selected ✓
+                </div>
+              ) : (
+                <>
+                  <Camera size={22} style={{ color: '#FF3B30', margin: '0 auto 4px' }} />
+                  <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#09090B', display: 'block' }}>Upload Payment Screenshot</span>
+                  <span style={{ fontSize: '0.68rem', color: '#71717A', fontWeight: 500 }}>Tap to select transaction receipt</span>
+                </>
+              )}
+              <input 
+                type="file" 
+                accept="image/*" 
+                style={{ display: 'none' }} 
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    try {
+                      setIsUploadingBoostProof(true);
+                      const base64 = await fileToCompressedBase64(file, 800, 0.72);
+                      setBoostScreenshot(base64);
+                    } catch (err) {
+                      console.error('Boost screenshot error:', err);
+                    } finally {
+                      setIsUploadingBoostProof(false);
+                    }
+                  }
+                }} 
+              />
+            </label>
+
+            {/* Submit Proof to Admin */}
+            <button 
+              onClick={() => {
+                if (!boostScreenshot) {
+                  alert('Please upload your payment screenshot before submitting.');
+                  return;
+                }
+                setBoostToast('✨ Boost Payment Proof sent to admin! Will be activated shortly.');
+                setShowBoostPurchaseModal(false);
+                setBoostScreenshot(null);
+                setTimeout(() => setBoostToast(''), 4500);
+              }}
+              className="btn-black-pill" 
+              style={{ width: '100%', marginBottom: '10px' }}
+            >
+              Submit Screenshot & Request Boost
+            </button>
+
+            <button 
+              onClick={() => setShowBoostPurchaseModal(false)} 
+              className="btn-secondary" 
+              style={{ width: '100%', padding: '11px' }}
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 

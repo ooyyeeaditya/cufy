@@ -38,7 +38,9 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
     drinking: 'Socially',
     smoking: 'Never',
     drugs: 'Never',
-    photos: [null, null, null, null, null, null],
+    photos: (initialData?.photos && Array.isArray(initialData.photos) && initialData.photos.some(Boolean))
+      ? initialData.photos
+      : (initialData?.photo ? [initialData.photo, null, null, null, null, null] : [null, null, null, null, null, null]),
     bio: '',
     prompt1: 'Together, we could...',
     prompt1Answer: '',
@@ -213,6 +215,15 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
       return;
     }
 
+    // Require at least 1 profile photo on step 16
+    if (step === 16) {
+      const hasPhoto = formData.photos.some(Boolean);
+      if (!hasPhoto) {
+        alert('Please upload at least one profile photo (Main DP) to continue.');
+        return;
+      }
+    }
+
     if (step < totalSteps) {
       setStep(prev => prev + 1);
     }
@@ -234,6 +245,13 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
 
   const handlePayment = (e) => {
     e.preventDefault();
+
+    // Verify payment screenshot for men
+    if (formData.gender !== 'Woman' && !paymentProofUrl) {
+      alert('Please upload your UPI payment transaction screenshot before submitting.');
+      return;
+    }
+
     setIsProcessingPayment(true);
     setTimeout(() => {
       setIsProcessingPayment(false);
@@ -242,6 +260,7 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
         const planDays = formData.gender === 'Woman' ? 365 : (selectedPlan.id === 'day_199' ? 1 : selectedPlan.id === 'week_299' ? 7 : selectedPlan.id === 'days15_499' ? 15 : 30);
         const completedData = {
           ...formData,
+          photos: formData.photos.filter(Boolean),
           plan: formData.gender === 'Woman' ? 'Free Pass for Women' : selectedPlan.title,
           planId: formData.gender === 'Woman' ? 'free_women' : selectedPlan.id,
           planPrice: formData.gender === 'Woman' ? 0 : selectedPlan.price,
@@ -300,7 +319,7 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
     const file = e.target.files?.[0];
     if (file && activeSlotIdx !== null) {
       try {
-        const imageUrl = await fileToCompressedBase64(file, 1000, 0.8);
+        const imageUrl = await fileToCompressedBase64(file, 640, 0.72);
         const newPhotos = [...formData.photos];
         newPhotos[activeSlotIdx] = imageUrl;
         setFormData(prev => ({ ...prev, photos: newPhotos }));
