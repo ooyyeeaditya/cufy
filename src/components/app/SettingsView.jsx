@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Edit2, Zap, ShieldCheck, Lock, ChevronRight, CheckCircle2, RotateCcw, UserX, X, Camera, Sparkles } from 'lucide-react';
+import { ArrowLeft, Edit2, Zap, ShieldCheck, Lock, ChevronRight, CheckCircle2, RotateCcw, UserX, X, Camera, Sparkles, Clock } from 'lucide-react';
 import EditProfileModal from './EditProfileModal';
 
 export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, onLogout, onOpenAdmin, onUpdateProfile }) {
@@ -148,24 +148,32 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
 
         {/* Top Bar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <h1 style={{ fontSize: '1.9rem', fontWeight: 900, color: '#09090B', letterSpacing: '-0.8px' }}>
-              {profileData.name.toLowerCase()}
-            </h1>
-            {/* Verified Badge */}
-            <div style={{
-              width: '20px',
-              height: '20px',
-              borderRadius: '50%',
-              background: '#A1A1AA',
-              color: '#FFFFFF',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '0.7rem'
-            }}>
-              ✓
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h1 style={{ fontSize: '1.9rem', fontWeight: 900, color: '#09090B', letterSpacing: '-0.8px', margin: 0 }}>
+                {profileData.name.toLowerCase()}
+              </h1>
+              {/* Verified Badge */}
+              <div style={{
+                width: '20px',
+                height: '20px',
+                borderRadius: '50%',
+                background: userProfile?.is_verified ? '#10B981' : '#A1A1AA',
+                color: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.7rem'
+              }}>
+                ✓
+              </div>
             </div>
+            {userProfile?.expiresAt && (
+              <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#059669', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Clock size={13} />
+                {userProfile.plan || 'VIP Pass'} • Expires {new Date(userProfile.expiresAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit' })}
+              </div>
+            )}
           </div>
 
           {/* Edit Profile Button */}

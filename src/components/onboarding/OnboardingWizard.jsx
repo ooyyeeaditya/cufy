@@ -239,8 +239,13 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
       setIsProcessingPayment(false);
       setPaymentSuccess(true);
       setTimeout(() => {
+        const planDays = formData.gender === 'Woman' ? 365 : (selectedPlan.id === 'day_199' ? 1 : selectedPlan.id === 'week_299' ? 7 : selectedPlan.id === 'days15_499' ? 15 : 30);
         const completedData = {
           ...formData,
+          plan: formData.gender === 'Woman' ? 'Free Pass for Women' : selectedPlan.title,
+          planId: formData.gender === 'Woman' ? 'free_women' : selectedPlan.id,
+          planPrice: formData.gender === 'Woman' ? 0 : selectedPlan.price,
+          planDays: planDays,
           paymentProofUrl,
           status: 'pending_approval'
         };

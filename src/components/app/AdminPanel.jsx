@@ -1,8 +1,22 @@
 import React, { useState } from 'react';
-import { ShieldCheck, CheckCircle2, XCircle, Users, Heart, CreditCard, LogOut, ChevronRight, Eye, UserX, AlertCircle, RefreshCw, Phone, Mail, MapPin, Sparkles, Camera, Zap, Check, X, UploadCloud } from 'lucide-react';
+import { ShieldCheck, CheckCircle2, XCircle, Users, Heart, CreditCard, LogOut, ChevronRight, Eye, UserX, AlertCircle, RefreshCw, Phone, Mail, MapPin, Sparkles, Camera, Zap, Check, X, UploadCloud, Clock, Calendar } from 'lucide-react';
 import { ENV } from '../../config/env';
-import { fetchAllCloudUsers, updateCloudUserStatus, backfillAllUsersToSupabase } from '../../lib/cloudSync';
+import { fetchAllCloudUsers, updateCloudUserStatus, backfillAllUsersToSupabase, getPlanDurationDays, formatPlanName } from '../../lib/cloudSync';
 import { supabase } from '../../lib/supabase';
+
+function formatRemainingTime(expiresAt) {
+  if (!expiresAt) return null;
+  const now = new Date();
+  const exp = new Date(expiresAt);
+  const diff = exp - now;
+  if (diff <= 0) return { expired: true, text: 'Expired' };
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  if (days > 0) return { expired: false, text: `${days}d ${hours}h left`, days, hours };
+  if (hours > 0) return { expired: false, text: `${hours}h ${mins}m left`, days: 0, hours };
+  return { expired: false, text: `${mins}m left`, days: 0, hours: 0 };
+}
 
 export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSuccess, onLogout }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -33,7 +47,6 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
   }, [isOpen, userProfile]);
 
   // Sync real registered users from cloud & local database whenever panel opens or authenticates
-
   React.useEffect(() => {
     if (!isOpen) {
       if (!userProfile?.isAdmin) setIsAuthenticated(false);
@@ -46,21 +59,34 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
         if (Array.isArray(parsedUsers)) {
           setUsersList(parsedUsers);
 
+          const now = new Date();
+          const expired = parsedUsers.filter(u => u.status === 'expired' || (u.expiresAt && new Date(u.expiresAt) <= now));
+          setExpiredList(expired);
+
           // Build pending verifications queue exclusively from real users
-          const pending = parsedUsers.map(u => ({
-            id: `pay_${u.id}`,
-            userId: u.id,
-            userName: u.name,
-            userEmail: u.email,
-            userPhone: u.phone || '+91 9876543210',
-            gender: u.gender || 'Man',
-            planName: u.plan || (u.gender === 'Woman' ? 'Free Pass for Women' : '1 Month VIP Pass'),
-            amount: u.gender === 'Woman' ? '₹0 FREE' : '₹799',
-            type: 'Membership Pass',
-            screenshotUrl: u.paymentProofUrl || u.paymentProof || '/photos/couple1.jpg',
-            timestamp: u.registered || 'Just now',
-            status: u.status === 'approved' ? 'approved' : 'pending'
-          }));
+          const pending = parsedUsers.map(u => {
+            const isExp = expired.some(e => e.id === u.id);
+            const isApproved = u.status === 'approved' && !isExp;
+            const isRejected = u.status === 'rejected';
+
+            return {
+              id: `pay_${u.id}`,
+              userId: u.id,
+              userName: u.name,
+              userEmail: u.email,
+              userPhone: u.phone || '+91 9876543210',
+              gender: u.gender || 'Man',
+              planName: u.plan || (u.gender === 'Woman' ? 'Free Pass for Women' : '1 Month VIP Pass'),
+              planDays: u.planDays || getPlanDurationDays(u.plan),
+              startsAt: u.startsAt,
+              expiresAt: u.expiresAt,
+              amount: u.gender === 'Woman' ? '₹0 FREE' : (u.payments?.[0]?.amount || '₹799'),
+              type: 'Membership Pass',
+              screenshotUrl: u.paymentProofUrl || u.paymentProof || '/photos/couple1.jpg',
+              timestamp: u.registered || 'Just now',
+              status: isApproved ? 'approved' : (isRejected ? 'rejected' : 'pending')
+            };
+          });
           setPendingPayments(pending);
         }
 
@@ -123,26 +149,34 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
     }
   };
 
-  const handleApprovePayment = async (id) => {
+  // Approve Payment & Activate Plan Duration Timer
+  const handleApprovePayment = async (id, customDays = null) => {
+    const targetPay = pendingPayments.find(p => p.id === id);
+    if (!targetPay) return;
+
+    const targetUserId = targetPay.userId;
+    const targetEmail = targetPay.userEmail;
+    const planDays = customDays || targetPay.planDays || getPlanDurationDays(targetPay.planName);
+
     setPendingPayments(prev => prev.map(p => p.id === id ? { ...p, status: 'approved' } : p));
     
-    // Find target user
-    const targetPay = pendingPayments.find(p => p.id === id);
-    const targetUserId = targetPay ? targetPay.userId : null;
-    const targetEmail = targetPay ? targetPay.userEmail : null;
-
     try {
-      await updateCloudUserStatus(targetUserId, targetEmail, 'approved');
-      setUsersList(prev => prev.map(u => u.id === targetUserId || u.email === targetEmail ? { ...u, status: 'approved' } : u));
+      await updateCloudUserStatus(targetUserId, targetEmail, 'approved', {
+        planName: targetPay.planName,
+        planDays
+      });
+      
+      const refreshed = await fetchAllCloudUsers();
+      setUsersList(refreshed);
     } catch (e) {
-      console.error(e);
+      console.error('Approve payment error:', e);
     }
 
     // Trigger browser native push notification
     if ('Notification' in window && Notification.permission === 'granted') {
       try {
         new Notification('🎉 Account Approved!', {
-          body: 'Your Cufy VIP account has been approved by Admin! Welcome to Cufy.',
+          body: `${targetPay.userName}'s ${planDays}-day plan is active!`,
           icon: '/photos/cufylogo.jpg'
         });
       } catch (err) {
@@ -151,12 +185,62 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
     }
 
     // Notify window event listeners to sync state instantly
-    window.dispatchEvent(new CustomEvent('cufy_user_approved'));
+    window.dispatchEvent(new CustomEvent('cufy_user_approved', {
+      detail: { email: targetEmail, status: 'approved', planDays }
+    }));
   };
 
+  const handleRejectPayment = async (id) => {
+    const targetPay = pendingPayments.find(p => p.id === id);
+    if (!targetPay) return;
 
-  const handleRejectPayment = (id) => {
     setPendingPayments(prev => prev.map(p => p.id === id ? { ...p, status: 'rejected' } : p));
+    try {
+      await updateCloudUserStatus(targetPay.userId, targetPay.userEmail, 'rejected');
+      const refreshed = await fetchAllCloudUsers();
+      setUsersList(refreshed);
+    } catch (e) {
+      console.error('Reject payment error:', e);
+    }
+  };
+
+  // Re-activate or Extend plan
+  const handleReactivateUser = async (user, days = 30) => {
+    try {
+      await updateCloudUserStatus(user.id, user.email, 'approved', {
+        planName: user.plan || '1 Month VIP Pass',
+        planDays: days
+      });
+      const refreshed = await fetchAllCloudUsers();
+      setUsersList(refreshed);
+      const now = new Date();
+      setExpiredList(refreshed.filter(u => u.status === 'expired' || (u.expiresAt && new Date(u.expiresAt) <= now)));
+      
+      if (selectedUserModal && selectedUserModal.id === user.id) {
+        const updatedUser = refreshed.find(u => u.id === user.id);
+        if (updatedUser) setSelectedUserModal(updatedUser);
+      }
+    } catch (e) {
+      console.error('Reactivation error:', e);
+    }
+  };
+
+  // Expire an account immediately
+  const handleExpireUserNow = async (user) => {
+    try {
+      await updateCloudUserStatus(user.id, user.email, 'expired');
+      const refreshed = await fetchAllCloudUsers();
+      setUsersList(refreshed);
+      const now = new Date();
+      setExpiredList(refreshed.filter(u => u.status === 'expired' || (u.expiresAt && new Date(u.expiresAt) <= now)));
+
+      if (selectedUserModal && selectedUserModal.id === user.id) {
+        const updatedUser = refreshed.find(u => u.id === user.id);
+        if (updatedUser) setSelectedUserModal(updatedUser);
+      }
+    } catch (e) {
+      console.error('Expire error:', e);
+    }
   };
 
   const toggleUserStatus = (id) => {
@@ -276,28 +360,35 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <button onClick={() => setIsAuthenticated(false)} style={{ padding: '8px 12px', background: '#F4F4F5', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 800, color: '#09090B' }}>
+              <button onClick={() => setIsAuthenticated(false)} style={{ padding: '8px 12px', background: '#F4F4F5', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 800, color: '#09090B', border: 'none', cursor: 'pointer' }}>
                 Log out
               </button>
-              <button onClick={onClose} style={{ padding: '8px', background: '#F4F4F5', borderRadius: '50%', color: '#09090B' }}>
+              <button onClick={onClose} style={{ padding: '8px', background: '#F4F4F5', borderRadius: '50%', color: '#09090B', border: 'none', cursor: 'pointer' }}>
                 ✕
               </button>
             </div>
           </div>
 
           {/* Quick Metrics Cards */}
-          <div style={{ padding: '14px 20px 6px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
-            <div style={{ background: '#FFFFFF', padding: '12px 16px', borderRadius: '18px', border: '1.5px solid #E4E4E7' }}>
-              <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#71717A', textTransform: 'uppercase' }}>Pending Verifications</div>
-              <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#FF3B30' }}>
+          <div style={{ padding: '14px 20px 6px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+            <div style={{ background: '#FFFFFF', padding: '12px 14px', borderRadius: '18px', border: '1.5px solid #E4E4E7' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#71717A', textTransform: 'uppercase' }}>Pending Verifications</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#FF3B30', marginTop: '2px' }}>
                 {pendingPayments.filter(p => p.status === 'pending').length}
               </div>
             </div>
 
-            <div style={{ background: '#FFFFFF', padding: '12px 16px', borderRadius: '18px', border: '1.5px solid #E4E4E7' }}>
-              <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#71717A', textTransform: 'uppercase' }}>Active Members</div>
-              <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#09090B' }}>
-                {usersList.length}
+            <div style={{ background: '#FFFFFF', padding: '12px 14px', borderRadius: '18px', border: '1.5px solid #E4E4E7' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#71717A', textTransform: 'uppercase' }}>Active Accounts</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#09090B', marginTop: '2px' }}>
+                {usersList.filter(u => u.status === 'approved').length}
+              </div>
+            </div>
+
+            <div style={{ background: '#FFFFFF', padding: '12px 14px', borderRadius: '18px', border: '1.5px solid #E4E4E7' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#71717A', textTransform: 'uppercase' }}>Expired Log</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#DC2626', marginTop: '2px' }}>
+                {expiredList.length}
               </div>
             </div>
           </div>
@@ -310,7 +401,7 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                 padding: '8px 14px', borderRadius: '12px',
                 background: activeTab === 'verifications' ? '#09090B' : '#FFFFFF',
                 color: activeTab === 'verifications' ? '#FFFFFF' : '#71717A',
-                fontWeight: 800, fontSize: '0.8rem', border: '1px solid #E4E4E7', whiteSpace: 'nowrap'
+                fontWeight: 800, fontSize: '0.8rem', border: '1px solid #E4E4E7', whiteSpace: 'nowrap', cursor: 'pointer'
               }}
             >
               Verifications ({pendingPayments.filter(p => p.status === 'pending').length})
@@ -322,7 +413,7 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                 padding: '8px 14px', borderRadius: '12px',
                 background: activeTab === 'users' ? '#09090B' : '#FFFFFF',
                 color: activeTab === 'users' ? '#FFFFFF' : '#71717A',
-                fontWeight: 800, fontSize: '0.8rem', border: '1px solid #E4E4E7', whiteSpace: 'nowrap'
+                fontWeight: 800, fontSize: '0.8rem', border: '1px solid #E4E4E7', whiteSpace: 'nowrap', cursor: 'pointer'
               }}
             >
               User Accounts ({usersList.length})
@@ -334,7 +425,7 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                 padding: '8px 14px', borderRadius: '12px',
                 background: activeTab === 'expired' ? '#09090B' : '#FFFFFF',
                 color: activeTab === 'expired' ? '#FFFFFF' : '#71717A',
-                fontWeight: 800, fontSize: '0.8rem', border: '1px solid #E4E4E7', whiteSpace: 'nowrap'
+                fontWeight: 800, fontSize: '0.8rem', border: '1px solid #E4E4E7', whiteSpace: 'nowrap', cursor: 'pointer'
               }}
             >
               Expired Log ({expiredList.length})
@@ -349,82 +440,105 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 {pendingPayments.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '40px 20px', color: '#71717A', fontWeight: 600 }}>
-                    No pending payment screenshots in queue.
+                    No payment screenshots in queue.
                   </div>
                 ) : (
-                  pendingPayments.map((pay) => (
-                    <div key={pay.id} style={{
-                      background: '#FFFFFF', borderRadius: '20px', padding: '16px',
-                      border: '1.5px solid #E4E4E7', boxShadow: '0 4px 16px rgba(0,0,0,0.03)'
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                        <div>
-                          <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#09090B' }}>{pay.userName}</div>
-                          <div style={{ fontSize: '0.78rem', color: '#71717A', fontWeight: 600 }}>{pay.userEmail} • {pay.userPhone}</div>
-                          <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#FF3B30', marginTop: '4px' }}>
-                            {pay.planName} • {pay.amount}
+                  pendingPayments.map((pay) => {
+                    const rem = pay.expiresAt ? formatRemainingTime(pay.expiresAt) : null;
+                    return (
+                      <div key={pay.id} style={{
+                        background: '#FFFFFF', borderRadius: '20px', padding: '16px',
+                        border: pay.status === 'pending' ? '2px solid #FF3B30' : '1.5px solid #E4E4E7',
+                        boxShadow: '0 4px 16px rgba(0,0,0,0.03)'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '1.05rem', fontWeight: 900, color: '#09090B' }}>{pay.userName}</span>
+                              <span style={{ fontSize: '0.72rem', fontWeight: 800, background: '#F4F4F5', padding: '2px 6px', borderRadius: '6px', color: '#71717A' }}>
+                                {pay.gender}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: '#71717A', fontWeight: 600, marginTop: '2px' }}>
+                              {pay.userEmail} • {pay.userPhone}
+                            </div>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#FF3B30', marginTop: '4px' }}>
+                              {pay.planName} • {pay.amount}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#52525B', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Clock size={12} /> Plan Duration: <b>{pay.planDays} Days Timer</b>
+                            </div>
+                          </div>
+
+                          {/* Screenshot Thumbnail */}
+                          <div 
+                            onClick={() => setSelectedScreenshot(pay.screenshotUrl)}
+                            style={{
+                              width: '64px', height: '74px', borderRadius: '12px',
+                              overflow: 'hidden', border: '1.5px solid #09090B', cursor: 'pointer', position: 'relative',
+                              background: '#F4F4F5', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            }}
+                          >
+                            {pay.screenshotUrl && !pay.screenshotUrl.startsWith('blob:') ? (
+                              <img 
+                                src={pay.screenshotUrl} 
+                                alt="Payment proof" 
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <div style={{
+                                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                                width: '100%', height: '100%', background: '#FEF2F2', padding: '4px', textAlign: 'center'
+                              }}>
+                                <Camera size={16} color="#DC2626" />
+                                <span style={{ fontSize: '0.55rem', fontWeight: 800, color: '#DC2626', marginTop: '2px' }}>Proof</span>
+                              </div>
+                            )}
+                            <span style={{ position: 'absolute', bottom: '2px', left: '2px', background: 'rgba(9,9,11,0.85)', color: '#FFFFFF', fontSize: '0.6rem', padding: '1px 5px', borderRadius: '4px' }}>
+                              View
+                            </span>
                           </div>
                         </div>
 
-                        {/* Screenshot Thumbnail */}
-                        <div 
-                          onClick={() => setSelectedScreenshot(pay.screenshotUrl)}
-                          style={{
-                            width: '64px', height: '74px', borderRadius: '12px',
-                            overflow: 'hidden', border: '1.5px solid #09090B', cursor: 'pointer', position: 'relative',
-                            background: '#F4F4F5', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                          }}
-                        >
-                          {pay.screenshotUrl && !pay.screenshotUrl.startsWith('blob:') ? (
-                            <img 
-                              src={pay.screenshotUrl} 
-                              alt="Payment proof" 
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                              onError={(e) => {
-                                e.currentTarget.style.display = 'none';
-                              }}
-                            />
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #F4F4F5', paddingTop: '12px' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#71717A', fontWeight: 600 }}>
+                            {pay.timestamp}
+                          </span>
+
+                          {pay.status === 'pending' ? (
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button 
+                                onClick={() => handleRejectPayment(pay.id)}
+                                style={{ padding: '7px 14px', background: '#F4F4F5', color: '#09090B', borderRadius: '10px', fontSize: '0.8rem', fontWeight: 800, border: 'none', cursor: 'pointer' }}
+                              >
+                                Reject
+                              </button>
+                              <button 
+                                onClick={() => handleApprovePayment(pay.id)}
+                                style={{ padding: '7px 16px', background: '#10B981', color: '#FFFFFF', borderRadius: '10px', fontSize: '0.8rem', fontWeight: 800, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                              >
+                                <Check size={14} /> Approve ({pay.planDays}d)
+                              </button>
+                            </div>
                           ) : (
-                            <div style={{
-                              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                              width: '100%', height: '100%', background: '#FEF2F2', padding: '4px', textAlign: 'center'
-                            }}>
-                              <Camera size={16} color="#DC2626" />
-                              <span style={{ fontSize: '0.55rem', fontWeight: 800, color: '#DC2626', marginTop: '2px' }}>Legacy</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {pay.status === 'approved' && rem && !rem.expired && (
+                                <span style={{ fontSize: '0.74rem', color: '#059669', fontWeight: 700 }}>
+                                  ⏳ {rem.text}
+                                </span>
+                              )}
+                              <span style={{ fontSize: '0.8rem', fontWeight: 800, color: pay.status === 'approved' ? '#10B981' : '#EF4444', textTransform: 'uppercase' }}>
+                                {pay.status}
+                              </span>
                             </div>
                           )}
-                          <span style={{ position: 'absolute', bottom: '2px', left: '2px', background: 'rgba(9,9,11,0.85)', color: '#FFFFFF', fontSize: '0.6rem', padding: '1px 5px', borderRadius: '4px' }}>
-                            View
-                          </span>
                         </div>
                       </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #F4F4F5', paddingTop: '12px' }}>
-                        <span style={{ fontSize: '0.75rem', color: '#71717A', fontWeight: 600 }}>{pay.timestamp}</span>
-
-                        {pay.status === 'pending' ? (
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button 
-                              onClick={() => handleRejectPayment(pay.id)}
-                              style={{ padding: '6px 12px', background: '#F4F4F5', color: '#09090B', borderRadius: '10px', fontSize: '0.8rem', fontWeight: 800 }}
-                            >
-                              Reject
-                            </button>
-                            <button 
-                              onClick={() => handleApprovePayment(pay.id)}
-                              style={{ padding: '6px 14px', background: '#10B981', color: '#FFFFFF', borderRadius: '10px', fontSize: '0.8rem', fontWeight: 800 }}
-                            >
-                              Approve Payment
-                            </button>
-                          </div>
-                        ) : (
-                          <span style={{ fontSize: '0.8rem', fontWeight: 800, color: pay.status === 'approved' ? '#10B981' : '#EF4444', textTransform: 'uppercase' }}>
-                            {pay.status}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             )}
@@ -445,7 +559,8 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                         color: genderFilter === g ? '#FFFFFF' : '#09090B',
                         fontWeight: 800,
                         fontSize: '0.78rem',
-                        border: '1px solid #E4E4E7'
+                        border: '1px solid #E4E4E7',
+                        cursor: 'pointer'
                       }}
                     >
                       {g}
@@ -454,198 +569,343 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {filteredUsers.map((usr) => (
-                    <div 
-                      key={usr.id}
-                      onClick={() => setSelectedUserModal(usr)}
-                      style={{
-                        background: '#FFFFFF',
-                        borderRadius: '20px',
-                        padding: '16px',
-                        border: '1.5px solid #E4E4E7',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ width: '48px', height: '48px', borderRadius: '14px', overflow: 'hidden', border: '1.5px solid #E4E4E7' }}>
-                          <img src={usr.photos[0]} alt={usr.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  {filteredUsers.map((usr) => {
+                    const rem = usr.expiresAt ? formatRemainingTime(usr.expiresAt) : null;
+                    const isApproved = usr.status === 'approved' && (!rem || !rem.expired);
+                    const isPending = usr.status === 'pending_approval' || usr.status === 'pending';
+                    const isExp = usr.status === 'expired' || (rem && rem.expired);
+
+                    return (
+                      <div 
+                        key={usr.id}
+                        style={{
+                          background: '#FFFFFF',
+                          borderRadius: '20px',
+                          padding: '16px',
+                          border: '1.5px solid #E4E4E7',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
+                        }}
+                      >
+                        <div 
+                          onClick={() => setSelectedUserModal(usr)}
+                          style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, cursor: 'pointer' }}
+                        >
+                          <div style={{ width: '48px', height: '48px', borderRadius: '14px', overflow: 'hidden', border: '1.5px solid #E4E4E7', flexShrink: 0 }}>
+                            <img src={usr.photos[0] || '/photos/front1.jpg'} alt={usr.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          </div>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '1rem', fontWeight: 900, color: '#09090B' }}>
+                                {usr.name}, {usr.age}
+                              </span>
+                              <span style={{ fontSize: '0.72rem', fontWeight: 800, background: '#F4F4F5', padding: '2px 6px', borderRadius: '6px', color: '#71717A' }}>
+                                {usr.gender}
+                              </span>
+                              
+                              {isApproved && (
+                                <span style={{ fontSize: '0.68rem', fontWeight: 800, background: '#ECFDF5', color: '#059669', padding: '2px 6px', borderRadius: '6px' }}>
+                                  APPROVED
+                                </span>
+                              )}
+                              {isPending && (
+                                <span style={{ fontSize: '0.68rem', fontWeight: 800, background: '#FEF3C7', color: '#D97706', padding: '2px 6px', borderRadius: '6px' }}>
+                                  PENDING
+                                </span>
+                              )}
+                              {isExp && (
+                                <span style={{ fontSize: '0.68rem', fontWeight: 800, background: '#FEE2E2', color: '#DC2626', padding: '2px 6px', borderRadius: '6px' }}>
+                                  EXPIRED
+                                </span>
+                              )}
+                            </div>
+
+                            <div style={{ fontSize: '0.78rem', color: '#71717A', fontWeight: 600, marginTop: '2px' }}>
+                              {usr.city} • {usr.plan}
+                            </div>
+
+                            {/* Live Remaining Days Timer */}
+                            {isApproved && rem && !rem.expired && (
+                              <div style={{ fontSize: '0.74rem', color: '#059669', fontWeight: 800, marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Clock size={12} /> {rem.text} (Expires: {new Date(usr.expiresAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit' })})
+                              </div>
+                            )}
+
+                            {isExp && (
+                              <div style={{ fontSize: '0.74rem', color: '#DC2626', fontWeight: 800, marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <AlertCircle size={12} /> Plan expired on {usr.expiresAt ? new Date(usr.expiresAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit' }) : 'earlier'}
+                              </div>
+                            )}
+
+                            {isPending && (
+                              <div style={{ fontSize: '0.74rem', color: '#D97706', fontWeight: 800, marginTop: '2px' }}>
+                                Awaiting payment approval • {usr.plan}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <div>
-                          <div style={{ fontSize: '1rem', fontWeight: 900, color: '#09090B' }}>
-                            {usr.name}, {usr.age} <span style={{ fontSize: '0.75rem', fontWeight: 800, background: '#F4F4F5', padding: '2px 6px', borderRadius: '6px', color: '#71717A' }}>{usr.gender}</span>
-                          </div>
-                          <div style={{ fontSize: '0.78rem', color: '#71717A', fontWeight: 600, marginTop: '2px' }}>
-                            {usr.city} • {usr.plan}
-                          </div>
-                          <div style={{ fontSize: '0.75rem', color: '#FF3B30', fontWeight: 700, marginTop: '2px' }}>
-                            Tap to view full logs & matches ({usr.matches.length})
-                          </div>
+
+                        {/* Quick Action Button */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {isPending && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleApprovePayment(`pay_${usr.id}`, usr.planDays || 30);
+                              }}
+                              style={{
+                                padding: '6px 12px',
+                                background: '#10B981',
+                                color: '#FFFFFF',
+                                borderRadius: '10px',
+                                fontSize: '0.75rem',
+                                fontWeight: 800,
+                                border: 'none',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Approve
+                            </button>
+                          )}
+                          {isExp && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleReactivateUser(usr, 30);
+                              }}
+                              style={{
+                                padding: '6px 10px',
+                                background: '#09090B',
+                                color: '#FFFFFF',
+                                borderRadius: '10px',
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                                border: 'none',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              +30 Days
+                            </button>
+                          )}
+                          <ChevronRight size={18} style={{ color: '#71717A', cursor: 'pointer' }} onClick={() => setSelectedUserModal(usr)} />
                         </div>
                       </div>
-
-                      <ChevronRight size={20} style={{ color: '#09090B' }} />
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
 
-            {/* TAB 3: EXPIRED / DELETED LOG */}
+            {/* TAB 3: EXPIRED LOG */}
             {activeTab === 'expired' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {expiredList.map((exp) => (
-                  <div key={exp.id} style={{
-                    background: '#FFFFFF', borderRadius: '20px', padding: '16px', border: '1.5px solid #E4E4E7'
-                  }}>
-                    <div style={{ fontSize: '0.98rem', fontWeight: 900, color: '#09090B' }}>{exp.name}</div>
-                    <div style={{ fontSize: '0.78rem', color: '#71717A', fontWeight: 600 }}>{exp.email}</div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '0.78rem', color: '#B91C1C', fontWeight: 800 }}>
-                      <span>{exp.reason}</span>
-                      <span style={{ color: '#71717A', fontWeight: 500 }}>{exp.date}</span>
-                    </div>
+                {expiredList.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 20px', color: '#71717A', fontWeight: 600 }}>
+                    No expired member accounts.
                   </div>
-                ))}
+                ) : (
+                  expiredList.map((exp) => (
+                    <div key={exp.id} style={{
+                      background: '#FFFFFF', borderRadius: '20px', padding: '16px', border: '1.5px solid #FCA5A5'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div>
+                          <div style={{ fontSize: '1rem', fontWeight: 900, color: '#09090B' }}>{exp.name}</div>
+                          <div style={{ fontSize: '0.78rem', color: '#71717A', fontWeight: 600 }}>{exp.email} • {exp.phone}</div>
+                          <div style={{ fontSize: '0.8rem', color: '#991B1B', fontWeight: 800, marginTop: '4px' }}>
+                            Expired Plan: {exp.plan}
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: '#71717A', marginTop: '2px' }}>
+                            Expired Date: {exp.expiresAt ? new Date(exp.expiresAt).toLocaleDateString() : 'Earlier'}
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => handleReactivateUser(exp, 30)}
+                          style={{
+                            padding: '8px 14px',
+                            background: '#09090B',
+                            color: '#FFFFFF',
+                            borderRadius: '12px',
+                            fontSize: '0.78rem',
+                            fontWeight: 800,
+                            border: 'none',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Reactivate (+30d)
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             )}
 
           </div>
 
           {/* COMPREHENSIVE USER DETAIL INSPECTION MODAL */}
-          {selectedUserModal && (
-            <div style={{
-              position: 'fixed',
-              top: 0, left: 0, right: 0, bottom: 0,
-              background: 'rgba(9, 9, 11, 0.75)',
-              backdropFilter: 'blur(16px)',
-              zIndex: 1100,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '16px'
-            }}>
+          {selectedUserModal && (() => {
+            const modalRem = selectedUserModal.expiresAt ? formatRemainingTime(selectedUserModal.expiresAt) : null;
+            return (
               <div style={{
-                width: '100%',
-                maxWidth: '400px',
-                background: '#FFFFFF',
-                borderRadius: '28px',
-                padding: '24px',
-                maxHeight: '90vh',
-                overflowY: 'auto'
-              }} className="animate-fade-in">
-                
-                {/* Header with Close */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <h3 style={{ fontSize: '1.3rem', fontWeight: 900, color: '#09090B' }}>User Inspection Log</h3>
-                  <button onClick={() => setSelectedUserModal(null)} style={{ padding: '6px', background: '#F4F4F5', borderRadius: '50%' }}>
-                    <X size={18} />
-                  </button>
-                </div>
+                position: 'fixed',
+                top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(9, 9, 11, 0.75)',
+                backdropFilter: 'blur(16px)',
+                zIndex: 1100,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '16px'
+              }}>
+                <div style={{
+                  width: '100%',
+                  maxWidth: '400px',
+                  background: '#FFFFFF',
+                  borderRadius: '28px',
+                  padding: '24px',
+                  maxHeight: '90vh',
+                  overflowY: 'auto'
+                }} className="animate-fade-in">
+                  
+                  {/* Header with Close */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <h3 style={{ fontSize: '1.3rem', fontWeight: 900, color: '#09090B' }}>User Inspection Log</h3>
+                    <button onClick={() => setSelectedUserModal(null)} style={{ padding: '6px', background: '#F4F4F5', borderRadius: '50%', border: 'none', cursor: 'pointer' }}>
+                      <X size={18} />
+                    </button>
+                  </div>
 
-                {/* Profile Overview */}
-                <div style={{ display: 'flex', gap: '14px', alignItems: 'center', marginBottom: '16px', background: '#F5F3EF', padding: '14px', borderRadius: '20px' }}>
-                  <div style={{ width: '64px', height: '64px', borderRadius: '18px', overflow: 'hidden', border: '2px solid #FF3B30' }}>
-                    <img src={selectedUserModal.photos[0]} alt={selectedUserModal.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#09090B' }}>
-                      {selectedUserModal.name}, {selectedUserModal.age}
+                  {/* Profile Overview */}
+                  <div style={{ display: 'flex', gap: '14px', alignItems: 'center', marginBottom: '16px', background: '#F5F3EF', padding: '14px', borderRadius: '20px' }}>
+                    <div style={{ width: '64px', height: '64px', borderRadius: '18px', overflow: 'hidden', border: '2px solid #FF3B30', flexShrink: 0 }}>
+                      <img src={selectedUserModal.photos[0] || '/photos/front1.jpg'} alt={selectedUserModal.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     </div>
-                    <div style={{ fontSize: '0.82rem', color: '#71717A', fontWeight: 700 }}>
-                      {selectedUserModal.gender} • {selectedUserModal.city}
-                    </div>
-                    <div style={{ fontSize: '0.78rem', color: '#10B981', fontWeight: 800, marginTop: '2px' }}>
-                      Plan: {selectedUserModal.plan}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Contact Info */}
-                <div style={{ background: '#FFFFFF', border: '1.5px solid #E4E4E7', borderRadius: '18px', padding: '14px', marginBottom: '16px' }}>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 900, color: '#09090B', marginBottom: '8px' }}>Contact & Info</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', color: '#52525B', marginBottom: '6px' }}>
-                    <Mail size={14} style={{ color: '#FF3B30' }} />
-                    <span>{selectedUserModal.email}</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', color: '#52525B' }}>
-                    <Phone size={14} style={{ color: '#FF3B30' }} />
-                    <span>{selectedUserModal.phone}</span>
-                  </div>
-                </div>
-
-                {/* Matchmaking Log History */}
-                <div style={{ background: '#FFFFFF', border: '1.5px solid #E4E4E7', borderRadius: '18px', padding: '14px', marginBottom: '16px' }}>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 900, color: '#09090B', marginBottom: '8px' }}>Matched Profiles History</div>
-                  {selectedUserModal.matches.length === 0 ? (
-                    <div style={{ fontSize: '0.8rem', color: '#71717A' }}>No matches yet.</div>
-                  ) : (
-                    selectedUserModal.matches.map((m, idx) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: idx < selectedUserModal.matches.length - 1 ? '1px solid #F4F4F5' : 'none' }}>
-                        <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#09090B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <Heart size={12} color="#FF3B30" fill="#FF3B30" />
-                          <span>Matched with {m.name}</span>
-                        </div>
-                        <div style={{ fontSize: '0.72rem', color: '#71717A' }}>{m.matchedAt}</div>
+                    <div>
+                      <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#09090B' }}>
+                        {selectedUserModal.name}, {selectedUserModal.age}
                       </div>
-                    ))
-                  )}
-                </div>
+                      <div style={{ fontSize: '0.82rem', color: '#71717A', fontWeight: 700 }}>
+                        {selectedUserModal.gender} • {selectedUserModal.city}
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: '#10B981', fontWeight: 800, marginTop: '2px' }}>
+                        Plan: {selectedUserModal.plan}
+                      </div>
+                    </div>
+                  </div>
 
-                {/* Payment History & Proof Screenshots */}
-                <div style={{ background: '#FFFFFF', border: '1.5px solid #E4E4E7', borderRadius: '18px', padding: '14px', marginBottom: '16px' }}>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 900, color: '#09090B', marginBottom: '8px' }}>Payment & Boost History</div>
-                  {selectedUserModal.payments.length === 0 ? (
-                    <div style={{ fontSize: '0.8rem', color: '#71717A' }}>No payments uploaded yet.</div>
-                  ) : (
-                    selectedUserModal.payments.map((p, idx) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0' }}>
-                        <div>
-                          <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#09090B' }}>{p.plan} ({p.amount})</div>
-                          <div style={{ fontSize: '0.72rem', color: '#71717A' }}>{p.date} • {p.status}</div>
-                        </div>
+                  {/* Subscription & Timer Info */}
+                  <div style={{ background: '#FFFFFF', border: '1.5px solid #E4E4E7', borderRadius: '18px', padding: '14px', marginBottom: '16px' }}>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 900, color: '#09090B', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Clock size={16} color="#FF3B30" />
+                      Subscription & Expiration Timer
+                    </div>
+                    <div style={{ fontSize: '0.82rem', color: '#52525B', marginBottom: '4px' }}>
+                      <b>Status:</b> <span style={{ textTransform: 'uppercase', fontWeight: 800, color: selectedUserModal.status === 'approved' ? '#059669' : '#DC2626' }}>{selectedUserModal.status}</span>
+                    </div>
+                    <div style={{ fontSize: '0.82rem', color: '#52525B', marginBottom: '4px' }}>
+                      <b>Starts:</b> {selectedUserModal.startsAt ? new Date(selectedUserModal.startsAt).toLocaleString() : 'Not started'}
+                    </div>
+                    <div style={{ fontSize: '0.82rem', color: '#52525B', marginBottom: '4px' }}>
+                      <b>Expires:</b> {selectedUserModal.expiresAt ? new Date(selectedUserModal.expiresAt).toLocaleString() : 'No expiry set'}
+                    </div>
+                    {modalRem && (
+                      <div style={{ fontSize: '0.82rem', fontWeight: 800, color: modalRem.expired ? '#DC2626' : '#059669', marginTop: '6px' }}>
+                        {modalRem.expired ? '🔴 Plan Expired' : `🟢 Remaining: ${modalRem.text}`}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Contact Info */}
+                  <div style={{ background: '#FFFFFF', border: '1.5px solid #E4E4E7', borderRadius: '18px', padding: '14px', marginBottom: '16px' }}>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 900, color: '#09090B', marginBottom: '8px' }}>Contact & Info</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', color: '#52525B', marginBottom: '6px' }}>
+                      <Mail size={14} style={{ color: '#FF3B30' }} />
+                      <span>{selectedUserModal.email}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', color: '#52525B' }}>
+                      <Phone size={14} style={{ color: '#FF3B30' }} />
+                      <span>{selectedUserModal.phone}</span>
+                    </div>
+                  </div>
+
+                  {/* Payment & Proof Screenshot */}
+                  <div style={{ background: '#FFFFFF', border: '1.5px solid #E4E4E7', borderRadius: '18px', padding: '14px', marginBottom: '16px' }}>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 900, color: '#09090B', marginBottom: '8px' }}>Payment Screenshot</div>
+                    {selectedUserModal.paymentProofUrl ? (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: '0.82rem', color: '#52525B' }}>Payment Screenshot Attached</span>
                         <button 
-                          onClick={() => setSelectedScreenshot(p.screenshot)}
-                          style={{ padding: '4px 10px', background: '#F4F4F5', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 800, color: '#FF3B30' }}
+                          onClick={() => setSelectedScreenshot(selectedUserModal.paymentProofUrl)}
+                          style={{ padding: '6px 12px', background: '#09090B', color: '#FFFFFF', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 800, border: 'none', cursor: 'pointer' }}
                         >
-                          View SS
+                          View Full Proof
                         </button>
                       </div>
-                    ))
-                  )}
+                    ) : (
+                      <div style={{ fontSize: '0.8rem', color: '#71717A' }}>No payment screenshot.</div>
+                    )}
+                  </div>
+
+                  {/* Admin Actions */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {(selectedUserModal.status === 'pending_approval' || selectedUserModal.status === 'pending') && (
+                      <button 
+                        onClick={() => handleApprovePayment(`pay_${selectedUserModal.id}`, selectedUserModal.planDays || 30)}
+                        style={{
+                          width: '100%', padding: '12px', borderRadius: '14px',
+                          background: '#10B981', color: '#FFFFFF',
+                          fontWeight: 800, fontSize: '0.85rem', border: 'none', cursor: 'pointer'
+                        }}
+                      >
+                        ✓ Approve Payment & Start {selectedUserModal.planDays || 30}-Day Timer
+                      </button>
+                    )}
+
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button 
+                        onClick={() => handleReactivateUser(selectedUserModal, 30)}
+                        style={{
+                          flex: 1, padding: '12px', borderRadius: '14px',
+                          background: '#09090B', color: '#FFFFFF',
+                          fontWeight: 800, fontSize: '0.82rem', border: 'none', cursor: 'pointer'
+                        }}
+                      >
+                        +30 Days Ext.
+                      </button>
+
+                      <button 
+                        onClick={() => handleExpireUserNow(selectedUserModal)}
+                        style={{
+                          flex: 1, padding: '12px', borderRadius: '14px',
+                          background: '#FEF2F2', color: '#B91C1C',
+                          fontWeight: 800, fontSize: '0.82rem', border: 'none', cursor: 'pointer'
+                        }}
+                      >
+                        Expire Account Now
+                      </button>
+                    </div>
+
+                    <button 
+                      onClick={() => toggleUserBoost(selectedUserModal.id)}
+                      style={{
+                        width: '100%', padding: '10px', borderRadius: '14px',
+                        background: selectedUserModal.boostActive ? '#FFF0F0' : '#F4F4F5',
+                        color: selectedUserModal.boostActive ? '#FF3B30' : '#09090B',
+                        fontWeight: 800, fontSize: '0.8rem', border: 'none', cursor: 'pointer'
+                      }}
+                    >
+                      {selectedUserModal.boostActive ? 'Boost Active ⚡' : 'Grant Free Boost ⚡'}
+                    </button>
+                  </div>
+
                 </div>
-
-                {/* Admin Actions */}
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button 
-                    onClick={() => toggleUserBoost(selectedUserModal.id)}
-                    style={{
-                      flex: 1, padding: '12px', borderRadius: '14px',
-                      background: selectedUserModal.boostActive ? '#FFF0F0' : '#F4F4F5',
-                      color: selectedUserModal.boostActive ? '#FF3B30' : '#09090B',
-                      fontWeight: 800, fontSize: '0.82rem', border: 'none'
-                    }}
-                  >
-                    {selectedUserModal.boostActive ? 'Boost Active ⚡' : 'Grant Boost ⚡'}
-                  </button>
-
-                  <button 
-                    onClick={() => toggleUserStatus(selectedUserModal.id)}
-                    style={{
-                      flex: 1, padding: '12px', borderRadius: '14px',
-                      background: selectedUserModal.status === 'Active' ? '#ECFDF5' : '#FEF2F2',
-                      color: selectedUserModal.status === 'Active' ? '#047857' : '#B91C1C',
-                      fontWeight: 800, fontSize: '0.82rem', border: 'none'
-                    }}
-                  >
-                    {selectedUserModal.status}
-                  </button>
-                </div>
-
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Screenshot Zoom Modal */}
           {selectedScreenshot && (
@@ -678,65 +938,21 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                   </h4>
                   <button 
                     onClick={() => setSelectedScreenshot(null)}
-                    style={{ background: '#F4F4F5', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                    style={{ padding: '6px', background: '#F4F4F5', borderRadius: '50%', border: 'none', cursor: 'pointer' }}
                   >
-                    ✕
+                    <X size={18} />
                   </button>
                 </div>
 
-                {selectedScreenshot.startsWith('blob:') ? (
-                  <div style={{ padding: '22px 16px', background: '#FEF2F2', borderRadius: '16px', border: '1.5px dashed #FCA5A5', margin: '10px 0' }}>
-                    <AlertCircle size={32} color="#DC2626" style={{ margin: '0 auto 8px' }} />
-                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#991B1B', marginBottom: '6px' }}>
-                      Legacy Device Blob Upload
-                    </div>
-                    <p style={{ fontSize: '0.8rem', color: '#7F1D1D', margin: 0, lineHeight: '1.45' }}>
-                      This screenshot was submitted from an older version as a temporary device blob URL (<code>blob:...</code>) which is only accessible on the submitting user's local phone memory.
-                    </p>
-                    <p style={{ fontSize: '0.78rem', color: '#B91C1C', marginTop: '10px', fontWeight: 700 }}>
-                      ✅ All new payments now automatically upload permanent cross-device Data URLs visible in real time.
-                    </p>
-                  </div>
-                ) : (
-                  <div style={{ flex: 1, minHeight: '260px', maxHeight: '520px', overflow: 'auto', borderRadius: '16px', background: '#F8F9FA', border: '1px solid #E4E4E7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <img 
-                      src={selectedScreenshot} 
-                      alt="Full screenshot proof" 
-                      style={{ maxWidth: '100%', maxHeight: '500px', objectFit: 'contain', borderRadius: '12px' }}
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                        if (e.currentTarget.nextSibling) e.currentTarget.nextSibling.style.display = 'block';
-                      }}
-                    />
-                    <div style={{ display: 'none', padding: '24px', color: '#71717A', fontSize: '0.85rem' }}>
-                      Screenshot image unavailable.
-                    </div>
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
-                  {!selectedScreenshot.startsWith('blob:') && (
-                    <a 
-                      href={selectedScreenshot} 
-                      download="payment_proof.jpg"
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{
-                        flex: 1, padding: '12px', borderRadius: '14px', background: '#F4F4F5',
-                        color: '#09090B', textDecoration: 'none', fontWeight: 700, fontSize: '0.88rem',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center'
-                      }}
-                    >
-                      Download Image
-                    </a>
-                  )}
-                  <button 
-                    onClick={() => setSelectedScreenshot(null)}
-                    className="btn-black-pill"
-                    style={{ flex: 1, padding: '12px' }}
-                  >
-                    Close Proof
-                  </button>
+                <div style={{ flex: 1, overflow: 'hidden', borderRadius: '16px', background: '#09090B', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '300px' }}>
+                  <img 
+                    src={selectedScreenshot} 
+                    alt="Full Payment Proof" 
+                    style={{ maxWidth: '100%', maxHeight: '65vh', objectFit: 'contain' }}
+                    onError={(e) => {
+                      e.currentTarget.src = '/photos/couple1.jpg';
+                    }}
+                  />
                 </div>
               </div>
             </div>

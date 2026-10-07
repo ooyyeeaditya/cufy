@@ -85,3 +85,5 @@ export function isEphemeralBlobUrl(url) {
   if (!url || typeof url !== 'string') return false;
   return url.trim().toLowerCase().startsWith('blob:');
 }
+
+export const compressAndStoreImage = fileToCompressedBase64;

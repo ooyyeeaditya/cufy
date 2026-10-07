@@ -180,7 +180,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
               gender: dbProfile.gender || 'Man',
               age: dbProfile.age || 24,
               city: dbProfile.location || 'New Delhi',
-              status: dbProfile.is_verified || dbProfile.account_status === 'Active' ? 'approved' : 'pending_approval',
+              status: dbProfile.is_verified ? 'approved' : 'pending_approval',
               photos: dbProfile.photos && dbProfile.photos.length > 0 ? dbProfile.photos : [photo || '/photos/front1.jpg'],
               registered: dbProfile.created_at ? new Date(dbProfile.created_at).toLocaleDateString() : 'Today'
             };

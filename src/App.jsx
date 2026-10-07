@@ -19,10 +19,11 @@ import MatchModal from './components/app/MatchModal';
 import FilterModal from './components/app/FilterModal';
 import NotificationDrawer from './components/app/NotificationDrawer';
 import AdminPanel from './components/app/AdminPanel';
+import MembershipExpiredModal from './components/app/MembershipExpiredModal';
 
 import { INITIAL_DAILY_MATCH } from './data/mockProfiles';
 import { analytics } from './utils/analytics';
-import { syncUserToCloud } from './lib/cloudSync';
+import { syncUserToCloud, formatPlanName, getPlanDurationDays } from './lib/cloudSync';
 import { supabase } from './lib/supabase';
 import { Clock, ShieldCheck, Sparkles, RefreshCw, X, LogOut } from 'lucide-react';
 
@@ -91,17 +92,73 @@ export default function App() {
   };
 
 
-  // Sync user profile state from localStorage without forcing logout
-  const refreshUserSession = () => {
+  // Sync user profile state from localStorage & Supabase
+  const refreshUserSession = async () => {
     try {
       const savedUser = localStorage.getItem('cufy_active_user');
       if (savedUser) {
-        const parsed = JSON.parse(savedUser);
+        let parsed = JSON.parse(savedUser);
         if (parsed && parsed.isAdmin) {
           setUserProfile(parsed);
           setViewState('admin');
           setIsAdminOpen(true);
-        } else if (parsed) {
+          return;
+        }
+
+        const now = new Date();
+        // Check local expiry
+        if (parsed && parsed.expiresAt && new Date(parsed.expiresAt) <= now && parsed.gender !== 'Woman') {
+          parsed.status = 'expired';
+          localStorage.setItem('cufy_active_user', JSON.stringify(parsed));
+        }
+
+        // Live check against Supabase
+        if (parsed && parsed.email && supabase) {
+          try {
+            const cleanEmail = parsed.email.toLowerCase().trim();
+            const { data: dbProf } = await supabase
+              .from('profiles')
+              .select('id, is_verified, account_status')
+              .eq('email', cleanEmail)
+              .maybeSingle();
+
+            if (dbProf) {
+              const { data: mem } = await supabase
+                .from('memberships')
+                .select('*')
+                .eq('user_id', dbProf.id)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              const isVerified = Boolean(dbProf.is_verified || (mem && mem.status === 'approved'));
+              let isExpired = false;
+              if (mem?.expires_at && new Date(mem.expires_at) <= now && parsed.gender !== 'Woman') {
+                isExpired = true;
+              }
+
+              let updatedStatus = parsed.status;
+              if (dbProf.account_status === 'Suspended') updatedStatus = 'suspended';
+              else if (isExpired) updatedStatus = 'expired';
+              else if (isVerified) updatedStatus = 'approved';
+              else updatedStatus = 'pending_approval';
+
+              parsed = {
+                ...parsed,
+                status: updatedStatus,
+                is_verified: isVerified,
+                startsAt: mem?.starts_at || parsed.startsAt || null,
+                expiresAt: mem?.expires_at || parsed.expiresAt || null,
+                plan: mem?.plan_type ? formatPlanName(mem.plan_type) : parsed.plan
+              };
+              localStorage.setItem('cufy_active_user', JSON.stringify(parsed));
+            }
+          } catch (sbErr) {
+            console.warn('Session refresh Supabase check:', sbErr);
+          }
+        }
+
+        if (parsed) {
           setUserProfile(parsed);
           setViewState('app');
           setIsAdminOpen(false);
@@ -111,7 +168,6 @@ export default function App() {
           setIsAdminOpen(false);
         }
       } else {
-        // No logged-in user in localStorage -> reset session state cleanly
         setUserProfile(null);
         setViewState('welcome');
         setIsAdminOpen(false);
@@ -124,7 +180,7 @@ export default function App() {
     }
   };
 
-  // Restore persistent login session from localStorage on app launch & listen for approval events and Supabase OAuth
+  // Restore persistent login session from localStorage on app launch & listen for Supabase OAuth
   useEffect(() => {
     refreshUserSession();
 
@@ -146,16 +202,102 @@ export default function App() {
         authListener?.subscription?.unsubscribe();
       };
     }
+  }, []);
 
-    const handleApprovedEvent = () => {
-      refreshUserSession();
+  // Listen for real-time approval events across tabs/window
+  useEffect(() => {
+    const handleApprovedEvent = (e) => {
+      const detail = e?.detail;
+      const currentEmail = userProfile?.email?.toLowerCase().trim();
+      if (!detail || !detail.email || (currentEmail && detail.email.toLowerCase() === currentEmail)) {
+        refreshUserSession();
+        if (detail?.status === 'approved') {
+          setShowWelcomeModal(true);
+        }
+      }
     };
 
     window.addEventListener('cufy_user_approved', handleApprovedEvent);
     return () => {
       window.removeEventListener('cufy_user_approved', handleApprovedEvent);
     };
-  }, []);
+  }, [userProfile]);
+
+  // Real-time polling when account is pending approval (unlocks automatically in ~3s once Admin approves!)
+  useEffect(() => {
+    const isPending = userProfile && (userProfile.status === 'pending_approval' || userProfile.status === 'pending') && !userProfile.isAdmin;
+    if (!isPending || !userProfile?.email || !supabase) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const cleanEmail = userProfile.email.toLowerCase().trim();
+        const { data: dbProf } = await supabase
+          .from('profiles')
+          .select('id, is_verified, account_status')
+          .eq('email', cleanEmail)
+          .maybeSingle();
+
+        if (dbProf && dbProf.is_verified) {
+          const { data: mem } = await supabase
+            .from('memberships')
+            .select('*')
+            .eq('user_id', dbProf.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          const now = new Date();
+          const startsAt = mem?.starts_at || now.toISOString();
+          const expiresAt = mem?.expires_at || new Date(now.getTime() + 30 * 86400000).toISOString();
+
+          const approvedUser = {
+            ...userProfile,
+            status: 'approved',
+            is_verified: true,
+            startsAt,
+            expiresAt,
+            plan: mem?.plan_type ? formatPlanName(mem.plan_type) : userProfile.plan
+          };
+
+          setUserProfile(approvedUser);
+          localStorage.setItem('cufy_active_user', JSON.stringify(approvedUser));
+
+          try {
+            const dbStr = localStorage.getItem('cufy_registered_users');
+            if (dbStr) {
+              let dbUsers = JSON.parse(dbStr);
+              dbUsers = dbUsers.map(u => u.email?.toLowerCase() === cleanEmail ? { ...u, ...approvedUser } : u);
+              localStorage.setItem('cufy_registered_users', JSON.stringify(dbUsers));
+            }
+          } catch (e) {}
+
+          setShowWelcomeModal(true);
+        }
+      } catch (err) {
+        console.warn('Approval polling error:', err);
+      }
+    }, 3000);
+
+    return () => clearInterval(pollInterval);
+  }, [userProfile]);
+
+  // Automatic plan duration timer check: lock account when time is up!
+  useEffect(() => {
+    if (!userProfile || userProfile.isAdmin || userProfile.gender === 'Woman' || !userProfile.expiresAt) return;
+
+    const checkExpiry = () => {
+      const now = new Date();
+      if (new Date(userProfile.expiresAt) <= now && userProfile.status === 'approved') {
+        const expiredUser = { ...userProfile, status: 'expired' };
+        setUserProfile(expiredUser);
+        localStorage.setItem('cufy_active_user', JSON.stringify(expiredUser));
+      }
+    };
+
+    checkExpiry();
+    const expiryInterval = setInterval(checkExpiry, 30000);
+    return () => clearInterval(expiryInterval);
+  }, [userProfile]);
 
 
   useEffect(() => {
@@ -239,6 +381,27 @@ export default function App() {
           .maybeSingle();
 
         if (dbProfile) {
+          const { data: mem } = await supabase
+            .from('memberships')
+            .select('*')
+            .eq('user_id', dbProfile.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          const isVerified = Boolean(dbProfile.is_verified || (mem && mem.status === 'approved'));
+          const now = new Date();
+          let isExpired = false;
+          if (mem?.expires_at && new Date(mem.expires_at) <= now && dbProfile.gender !== 'Woman') {
+            isExpired = true;
+          }
+
+          let finalStatus = 'pending_approval';
+          if (dbProfile.account_status === 'Suspended') finalStatus = 'suspended';
+          else if (isExpired) finalStatus = 'expired';
+          else if (isVerified) finalStatus = 'approved';
+          else finalStatus = 'pending_approval';
+
           matchedUser = {
             id: dbProfile.id,
             name: dbProfile.name || name,
@@ -246,8 +409,11 @@ export default function App() {
             gender: dbProfile.gender || 'Man',
             age: dbProfile.age || 24,
             city: dbProfile.location || 'New Delhi',
-            status: dbProfile.is_verified || dbProfile.account_status === 'Active' ? 'approved' : 'pending_approval',
-            plan: dbProfile.gender === 'Woman' ? 'Free Pass for Women' : '1 Month VIP Pass',
+            status: finalStatus,
+            is_verified: isVerified,
+            startsAt: mem?.starts_at || null,
+            expiresAt: mem?.expires_at || null,
+            plan: mem?.plan_type ? formatPlanName(mem.plan_type) : (dbProfile.gender === 'Woman' ? 'Free Pass for Women' : '1 Month VIP Pass'),
             photos: dbProfile.photos && dbProfile.photos.length > 0 ? dbProfile.photos : [photo || '/photos/front1.jpg'],
             registered: dbProfile.created_at ? new Date(dbProfile.created_at).toLocaleDateString() : 'Today'
           };
@@ -325,7 +491,17 @@ export default function App() {
     setViewState('welcome');
   };
 
-  const isPendingApproval = userProfile && userProfile.status === 'pending_approval' && !userProfile.isAdmin;
+  const isPendingApproval = userProfile && (userProfile.status === 'pending_approval' || userProfile.status === 'pending') && !userProfile.isAdmin;
+
+  const isMembershipExpired = Boolean(
+    userProfile &&
+    !userProfile.isAdmin &&
+    userProfile.gender !== 'Woman' &&
+    (
+      userProfile.status === 'expired' ||
+      (userProfile.status === 'approved' && userProfile.expiresAt && new Date() >= new Date(userProfile.expiresAt))
+    )
+  );
 
   return (
     <div className="app-container">
@@ -384,8 +560,17 @@ export default function App() {
           {viewState === 'app' && (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
               
-              {/* PENDING ADMIN APPROVAL LOCKED SCREEN (For Men until Admin approves) */}
-              {isPendingApproval ? (
+              {/* MEMBERSHIP EXPIRED LOCKOUT SCREEN */}
+              {isMembershipExpired ? (
+                <MembershipExpiredModal 
+                  userProfile={userProfile} 
+                  onRenewSubmitted={(renewedUser) => {
+                    setUserProfile(renewedUser);
+                    localStorage.setItem('cufy_active_user', JSON.stringify(renewedUser));
+                  }}
+                  onLogout={handleLogout}
+                />
+              ) : isPendingApproval ? (
                 <div style={{
                   flex: 1,
                   display: 'flex',
