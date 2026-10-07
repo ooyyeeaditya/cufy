@@ -292,7 +292,7 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteReasonId, setDeleteReasonId] = useState('terms_violation');
   const [deleteCustomReason, setDeleteCustomReason] = useState('');
-  const [deleteMode, setDeleteMode] = useState('revoke'); // 'revoke' | 'permanent'
+  const [deleteMode, setDeleteMode] = useState('permanent'); // 'permanent' | 'revoke'
   const [isDeletingLoading, setIsDeletingLoading] = useState(false);
 
   // Toast / New Entry Notification
@@ -595,7 +595,7 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
     setDeleteTarget(user);
     setDeleteReasonId('terms_violation');
     setDeleteCustomReason('');
-    setDeleteMode('revoke');
+    setDeleteMode('permanent');
   };
 
   // CONFIRM REVOCATION OR PERMANENT DELETION WITH REASON
@@ -605,7 +605,7 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
 
     const target = deleteTarget;
     const rawId = (target.userId || target.id || '').toString();
-    const cleanUserId = rawId.replace(/^pay_/, '');
+    const cleanUserId = rawId.replace(/^(pay_|usr_)/, '');
     const targetEmail = (target.userEmail || target.email || '').toLowerCase().trim();
 
     let finalReason = '';
@@ -616,36 +616,33 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
       finalReason = found ? found.title : 'Account entry removed by administrator.';
     }
 
+    const isTarget = (itemEmail, itemId) => {
+      const normEmail = (itemEmail || '').toLowerCase().trim();
+      const normId = (itemId || '').toString().replace(/^(pay_|usr_)/, '');
+      if (targetEmail && normEmail && normEmail === targetEmail) return true;
+      if (cleanUserId && normId && normId === cleanUserId) return true;
+      return false;
+    };
+
     try {
       if (deleteMode === 'permanent') {
         // 1. Immediately remove from local state so UI updates instantly
-        setPendingPayments(prev => prev.filter(p => {
-          const pEmail = (p.userEmail || '').toLowerCase().trim();
-          const pId = (p.userId || p.id || '').toString().replace(/^pay_/, '');
-          return pEmail !== targetEmail && pId !== cleanUserId;
-        }));
-        setUsersList(prev => prev.filter(u => {
-          const uEmail = (u.email || '').toLowerCase().trim();
-          const uId = (u.id || '').toString().replace(/^pay_/, '');
-          return uEmail !== targetEmail && uId !== cleanUserId;
-        }));
+        setPendingPayments(prev => prev.filter(p => !isTarget(p.userEmail || p.email, p.userId || p.id)));
+        setUsersList(prev => prev.filter(u => !isTarget(u.email, u.id)));
+        setExpiredList(prev => prev.filter(e => !isTarget(e.email, e.id)));
 
         // 2. Permanently wipe in Supabase and broadcast
         await deleteCloudUser(cleanUserId, targetEmail);
       } else {
         // 1. Immediately move to rejected in local state
         setPendingPayments(prev => prev.map(p => {
-          const pEmail = (p.userEmail || '').toLowerCase().trim();
-          const pId = (p.userId || p.id || '').toString().replace(/^pay_/, '');
-          if (pEmail === targetEmail || pId === cleanUserId) {
+          if (isTarget(p.userEmail || p.email, p.userId || p.id)) {
             return { ...p, status: 'rejected', rejectionReason: finalReason };
           }
           return p;
         }));
         setUsersList(prev => prev.map(u => {
-          const uEmail = (u.email || '').toLowerCase().trim();
-          const uId = (u.id || '').toString().replace(/^pay_/, '');
-          if (uEmail === targetEmail || uId === cleanUserId) {
+          if (isTarget(u.email, u.id)) {
             return { ...u, status: 'rejected', rejectionReason: finalReason, is_verified: false };
           }
           return u;
@@ -656,7 +653,7 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
       }
 
       await loadUsers();
-      if (selectedProfileUser?.id === target.id || selectedProfileUser?.userId === target.userId) {
+      if (isTarget(selectedProfileUser?.email || selectedProfileUser?.userEmail, selectedProfileUser?.id || selectedProfileUser?.userId)) {
         setSelectedProfileUser(null);
       }
     } catch (err) {
@@ -2169,27 +2166,8 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                   Please specify the exact reason for revoking or deleting this user's entry.
                 </p>
 
-                {/* Action Mode Toggle: Revoke (Mark Rejected) vs Permanently Delete */}
+                {/* Action Mode Toggle: Permanently Delete vs Revoke / Reject */}
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', background: '#F4F4F5', padding: '4px', borderRadius: '14px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setDeleteMode('revoke')}
-                    style={{
-                      flex: 1,
-                      padding: '8px',
-                      borderRadius: '10px',
-                      border: 'none',
-                      background: deleteMode === 'revoke' ? '#FFFFFF' : 'transparent',
-                      color: deleteMode === 'revoke' ? '#DC2626' : '#71717A',
-                      fontWeight: 800,
-                      fontSize: '0.74rem',
-                      cursor: 'pointer',
-                      boxShadow: deleteMode === 'revoke' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none'
-                    }}
-                  >
-                    🚫 Revoke (Move to Rejected)
-                  </button>
-
                   <button
                     type="button"
                     onClick={() => setDeleteMode('permanent')}
@@ -2198,14 +2176,34 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                       padding: '8px',
                       borderRadius: '10px',
                       border: 'none',
-                      background: deleteMode === 'permanent' ? '#09090B' : 'transparent',
+                      background: deleteMode === 'permanent' ? '#DC2626' : 'transparent',
                       color: deleteMode === 'permanent' ? '#FFFFFF' : '#71717A',
                       fontWeight: 800,
                       fontSize: '0.74rem',
-                      cursor: 'pointer'
+                      cursor: 'pointer',
+                      boxShadow: deleteMode === 'permanent' ? '0 2px 6px rgba(220,38,38,0.25)' : 'none'
                     }}
                   >
                     🗑️ Permanently Delete
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDeleteMode('revoke')}
+                    style={{
+                      flex: 1,
+                      padding: '8px',
+                      borderRadius: '10px',
+                      border: 'none',
+                      background: deleteMode === 'revoke' ? '#09090B' : 'transparent',
+                      color: deleteMode === 'revoke' ? '#FFFFFF' : '#71717A',
+                      fontWeight: 800,
+                      fontSize: '0.74rem',
+                      cursor: 'pointer',
+                      boxShadow: deleteMode === 'revoke' ? '0 2px 6px rgba(0,0,0,0.1)' : 'none'
+                    }}
+                  >
+                    🚫 Revoke / Suspend Only
                   </button>
                 </div>
 
@@ -2296,7 +2294,7 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                       flex: 2,
                       padding: '12px',
                       borderRadius: '14px',
-                      background: deleteMode === 'permanent' ? '#09090B' : '#DC2626',
+                      background: '#DC2626',
                       color: '#FFFFFF',
                       fontSize: '0.82rem',
                       fontWeight: 900,
@@ -2306,11 +2304,11 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '6px',
-                      boxShadow: deleteMode === 'permanent' ? '0 4px 14px rgba(9,9,11,0.3)' : '0 4px 14px rgba(220,38,38,0.3)'
+                      boxShadow: '0 4px 14px rgba(220,38,38,0.35)'
                     }}
                   >
                     <Trash2 size={16} />
-                    {isDeletingLoading ? 'Processing...' : deleteMode === 'permanent' ? 'Permanently Wipe Entry' : 'Confirm Revoke & Archive'}
+                    {isDeletingLoading ? 'Processing...' : deleteMode === 'permanent' ? 'Delete Account Permanently' : 'Confirm Revoke & Suspend'}
                   </button>
                 </div>
 

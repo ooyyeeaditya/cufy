@@ -26,7 +26,7 @@ import { INITIAL_DAILY_MATCH } from './data/mockProfiles';
 import { analytics } from './utils/analytics';
 import { syncUserToCloud, formatPlanName, getPlanDurationDays } from './lib/cloudSync';
 import { supabase } from './lib/supabase';
-import { Clock, ShieldCheck, Sparkles, RefreshCw, X, LogOut } from 'lucide-react';
+import { Clock, ShieldCheck, Sparkles, RefreshCw, X, LogOut, ShieldAlert } from 'lucide-react';
 
 import './styles/index.css';
 
@@ -126,7 +126,7 @@ export default function App() {
               .maybeSingle();
 
             // 1. If profile is missing or marked Deleted: user was permanently deleted by admin!
-            if (!dbProf || dbProf.account_status === 'Deleted' || (dbProf.prompt2_answer && dbProf.prompt2_answer.startsWith('[DELETED]:'))) {
+            if (!dbProf || dbProf.account_status === 'Deleted' || (dbProf.prompt2_answer && dbProf.prompt2_answer.startsWith('[DELETED]')) || dbProf.name === '[Deleted Account]') {
               localStorage.removeItem('cufy_active_user');
               setUserProfile(null);
               setViewState('welcome');
@@ -302,20 +302,28 @@ export default function App() {
     const shouldPoll = userProfile && userProfile.email && !userProfile.isAdmin;
     if (!shouldPoll || !supabase) return;
 
-    const pollInterval = setInterval(async () => {
+    const checkDbStatus = async () => {
       try {
         const cleanEmail = userProfile.email.toLowerCase().trim();
         const { data: dbProf } = await supabase
           .from('profiles')
-          .select('id, is_verified, account_status, prompt2_answer')
+          .select('id, is_verified, account_status, prompt2_answer, name')
           .eq('email', cleanEmail)
           .maybeSingle();
 
         // 1. Account was permanently deleted by admin
-        if (!dbProf || dbProf.account_status === 'Deleted' || (dbProf.prompt2_answer && dbProf.prompt2_answer.startsWith('[DELETED]:'))) {
+        if (!dbProf || dbProf.account_status === 'Deleted' || (dbProf.prompt2_answer && dbProf.prompt2_answer.startsWith('[DELETED]')) || dbProf.name === '[Deleted Account]') {
           localStorage.removeItem('cufy_active_user');
           setUserProfile(null);
           setViewState('welcome');
+          if ('Notification' in window && Notification.permission === 'granted') {
+            try {
+              new Notification('Account Removed', {
+                body: 'Your Cufy profile has been permanently removed by administrator.',
+                icon: '/photos/cufylogo.jpg'
+              });
+            } catch (nErr) {}
+          }
           alert('Your account has been deleted by administrator.');
           return;
         }
@@ -326,6 +334,15 @@ export default function App() {
             const suspendedUser = { ...userProfile, status: 'suspended', is_verified: false };
             setUserProfile(suspendedUser);
             localStorage.setItem('cufy_active_user', JSON.stringify(suspendedUser));
+            if ('Notification' in window && Notification.permission === 'granted') {
+              try {
+                new Notification('🚫 Account Suspended', {
+                  body: 'Your profile has been deactivated by administrator.',
+                  icon: '/photos/cufylogo.jpg'
+                });
+              } catch (nErr) {}
+            }
+            alert('🚫 Account Notice: Your profile has been deactivated by administrator.');
           }
           return;
         }
@@ -420,9 +437,29 @@ export default function App() {
       } catch (err) {
         console.warn('Real-time polling note:', err);
       }
-    }, 3000);
+    };
 
-    return () => clearInterval(pollInterval);
+    const pollInterval = setInterval(checkDbStatus, 3000);
+
+    // Also realtime channel for instant event push
+    let realtimeChannel = null;
+    try {
+      realtimeChannel = supabase
+        .channel(`user_live_${cleanEmail}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'profiles', filter: `email=eq.${cleanEmail}` },
+          () => { checkDbStatus(); }
+        )
+        .subscribe();
+    } catch (e) {}
+
+    return () => {
+      clearInterval(pollInterval);
+      if (realtimeChannel) {
+        try { supabase.removeChannel(realtimeChannel); } catch (e) {}
+      }
+    };
   }, [userProfile]);
 
   // Automatic plan duration timer check: lock account when time is up!
@@ -525,26 +562,33 @@ export default function App() {
           .maybeSingle();
 
         if (dbProfile) {
-          const { data: mem } = await supabase
-            .from('memberships')
-            .select('*')
-            .eq('user_id', dbProfile.id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+          if (
+            dbProfile.account_status === 'Deleted' || 
+            (dbProfile.prompt2_answer && dbProfile.prompt2_answer.startsWith('[DELETED]')) ||
+            dbProfile.name === '[Deleted Account]'
+          ) {
+            matchedUser = null;
+          } else {
+            const { data: mem } = await supabase
+              .from('memberships')
+              .select('*')
+              .eq('user_id', dbProfile.id)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
 
-          const isVerified = Boolean(dbProfile.is_verified || (mem && mem.status === 'approved'));
-          const now = new Date();
-          let isExpired = false;
-          if (mem?.expires_at && new Date(mem.expires_at) <= now && dbProfile.gender !== 'Woman') {
-            isExpired = true;
-          }
+            const isVerified = Boolean(dbProfile.is_verified || (mem && mem.status === 'approved'));
+            const now = new Date();
+            let isExpired = false;
+            if (mem?.expires_at && new Date(mem.expires_at) <= now && dbProfile.gender !== 'Woman') {
+              isExpired = true;
+            }
 
-          let finalStatus = 'pending_approval';
-          if (dbProfile.account_status === 'Suspended') finalStatus = 'suspended';
-          else if (isExpired) finalStatus = 'expired';
-          else if (isVerified) finalStatus = 'approved';
-          else finalStatus = 'pending_approval';
+            let finalStatus = 'pending_approval';
+            if (dbProfile.account_status === 'Suspended') finalStatus = 'suspended';
+            else if (isExpired) finalStatus = 'expired';
+            else if (isVerified) finalStatus = 'approved';
+            else finalStatus = 'pending_approval';
 
           matchedUser = {
             id: dbProfile.id,
@@ -561,6 +605,7 @@ export default function App() {
             photos: dbProfile.photos && dbProfile.photos.length > 0 ? dbProfile.photos : (photo ? [photo] : []),
             registered: dbProfile.created_at ? new Date(dbProfile.created_at).toLocaleDateString() : 'Today'
           };
+          }
           try {
             const dbStr = localStorage.getItem('cufy_registered_users');
             let dbUsers = dbStr ? JSON.parse(dbStr) : [];
@@ -639,6 +684,12 @@ export default function App() {
 
   const isVerificationRejected = userProfile && userProfile.status === 'rejected' && !userProfile.isAdmin;
 
+  const isAccountSuspended = Boolean(
+    userProfile && 
+    (userProfile.status === 'suspended' || userProfile.status === 'deactivated') && 
+    !userProfile.isAdmin
+  );
+
   const isMembershipExpired = Boolean(
     userProfile &&
     !userProfile.isAdmin &&
@@ -706,8 +757,79 @@ export default function App() {
           {viewState === 'app' && (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
               
-              {/* MEMBERSHIP EXPIRED LOCKOUT SCREEN */}
-              {isMembershipExpired ? (
+              {/* ACCOUNT SUSPENDED / DEACTIVATED LOCKOUT SCREEN */}
+              {isAccountSuspended ? (
+                <div style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '32px 24px',
+                  textAlign: 'center',
+                  background: '#18181B',
+                  color: '#FFFFFF',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }} className="animate-fade-in">
+                  <div style={{
+                    width: '84px',
+                    height: '84px',
+                    borderRadius: '26px',
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    border: '1.5px solid rgba(239, 68, 68, 0.4)',
+                    color: '#EF4444',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: '22px',
+                    boxShadow: '0 12px 32px rgba(239, 68, 68, 0.25)'
+                  }}>
+                    <ShieldAlert size={44} />
+                  </div>
+
+                  <h1 style={{ fontSize: '1.8rem', fontWeight: 900, color: '#FFFFFF', marginBottom: '10px', letterSpacing: '-0.5px' }}>
+                    Account Deactivated
+                  </h1>
+
+                  <p style={{ fontSize: '0.92rem', color: '#A1A1AA', lineHeight: '1.55', maxWidth: '320px', marginBottom: '28px', fontWeight: 500 }}>
+                    Hi <b>{userProfile?.name || 'Member'}</b>, your profile has been deactivated by Cufy Administration. You can no longer access matches, chat, or account actions.
+                  </p>
+
+                  <div style={{
+                    padding: '12px 18px',
+                    borderRadius: '14px',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    marginBottom: '28px',
+                    maxWidth: '320px',
+                    width: '100%',
+                    fontSize: '0.78rem',
+                    color: '#71717A'
+                  }}>
+                    If you believe this is a mistake, please reach out to <span style={{ color: '#E4E4E7', fontWeight: 700 }}>cupid.livepro@gmail.com</span>
+                  </div>
+
+                  <button 
+                    onClick={handleLogout}
+                    className="btn-primary" 
+                    style={{ 
+                      width: '100%', 
+                      maxWidth: '280px', 
+                      padding: '14px', 
+                      background: '#DC2626', 
+                      borderColor: '#DC2626',
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center', 
+                      gap: '8px' 
+                    }}
+                  >
+                    <LogOut size={18} />
+                    Log Out
+                  </button>
+                </div>
+              ) : isMembershipExpired ? (
                 <MembershipExpiredModal 
                   userProfile={userProfile} 
                   onRenewSubmitted={(renewedUser) => {

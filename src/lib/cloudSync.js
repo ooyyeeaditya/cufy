@@ -299,13 +299,25 @@ export async function fetchAllCloudUsers() {
       } catch (e) {}
     }
 
+    let deletedKeys = [];
+    try {
+      const dStr = localStorage.getItem('cufy_deleted_users');
+      if (dStr) deletedKeys = JSON.parse(dStr);
+    } catch (e) {}
+
     if (profiles && Array.isArray(profiles) && profiles.length > 0) {
       profiles.forEach(p => {
         if (!p.email || p.email === 'cupid.livepro@gmail.com') return;
-        // Strictly exclude accounts deleted by admin
-        if (p.account_status === 'Deleted' || (p.prompt2_answer && p.prompt2_answer.startsWith('[DELETED]:'))) return;
-
         const cleanEmail = p.email.toLowerCase().trim();
+        // Strictly exclude accounts deleted by admin
+        if (
+          p.account_status === 'Deleted' || 
+          (p.prompt2_answer && p.prompt2_answer.startsWith('[DELETED]')) ||
+          p.name === '[Deleted Account]' ||
+          deletedKeys.includes(cleanEmail) ||
+          (p.id && deletedKeys.includes(p.id))
+        ) return;
+
         const mem = memberships ? memberships.find(m => m.user_id === p.id) : null;
         if (mem?.status === 'deleted') return;
         
@@ -422,11 +434,26 @@ export async function fetchAllCloudUsers() {
   // Source C: LocalStorage database
   try {
     const localStr = localStorage.getItem('cufy_registered_users');
+    let deletedKeys = [];
+    try {
+      const dStr = localStorage.getItem('cufy_deleted_users');
+      if (dStr) deletedKeys = JSON.parse(dStr);
+    } catch (e) {}
+
     if (localStr) {
       const localUsers = JSON.parse(localStr);
       localUsers.forEach(lu => {
-        if (lu.account_status === 'Deleted' || lu.status === 'deleted') return;
-        if (!cloudUsers.some(cu => cu.email && lu.email && cu.email.toLowerCase() === lu.email.toLowerCase())) {
+        const lEmail = (lu.email || '').toLowerCase().trim();
+        const lId = (lu.id || '').toString().replace(/^(pay_|usr_)/, '');
+        if (
+          lu.account_status === 'Deleted' || 
+          lu.status === 'deleted' || 
+          (lu.prompt2_answer && lu.prompt2_answer.startsWith('[DELETED]')) ||
+          lu.name === '[Deleted Account]' ||
+          deletedKeys.includes(lEmail) ||
+          deletedKeys.includes(lId)
+        ) return;
+        if (!cloudUsers.some(cu => cu.email && lu.email && cu.email.toLowerCase() === lEmail)) {
           cloudUsers.unshift(lu);
         }
       });
@@ -784,10 +811,11 @@ export async function deleteCloudUser(userId, userEmail) {
   const cleanEmail = sanitizeEmail(userEmail);
   const cleanId = userId ? userId.toString().replace(/^(pay_|usr_)/, '') : null;
   
-  // 1. Mark as Deleted in Supabase (Guaranteed to succeed over UPDATE permissions)
+  // 1. Mark as Deleted in Supabase (Complying with Postgres Check Constraints)
   try {
     const deletePayload = {
-      account_status: 'Deleted',
+      name: '[Deleted Account]',
+      account_status: 'Suspended',
       is_verified: false,
       photos: [],
       bio: '',
@@ -800,22 +828,31 @@ export async function deleteCloudUser(userId, userEmail) {
     }
     if (cleanId && cleanId.length === 36) {
       await supabase.from('profiles').update(deletePayload).eq('id', cleanId);
-      await supabase.from('memberships').update({ status: 'deleted', screenshot_url: null }).eq('user_id', cleanId);
+      await supabase.from('memberships').update({ status: 'rejected', screenshot_url: null }).eq('user_id', cleanId);
     }
 
     // Also attempt hard DELETE in case database policies allow it
     if (cleanId && cleanId.length === 36) {
-      await supabase.from('memberships').delete().eq('user_id', cleanId);
-      await supabase.from('profiles').delete().eq('id', cleanId);
+      try { await supabase.from('memberships').delete().eq('user_id', cleanId); } catch (e) {}
+      try { await supabase.from('profiles').delete().eq('id', cleanId); } catch (e) {}
     }
     if (cleanEmail) {
-      await supabase.from('profiles').delete().eq('email', cleanEmail);
+      try { await supabase.from('profiles').delete().eq('email', cleanEmail); } catch (e) {}
     }
   } catch (err) {
     console.warn('Supabase delete error:', err);
   }
 
-  // 2. Delete from LocalStorage
+  // 2. Persist to Deleted Registry in LocalStorage so it NEVER returns
+  try {
+    const delStr = localStorage.getItem('cufy_deleted_users');
+    let delList = delStr ? JSON.parse(delStr) : [];
+    if (cleanEmail && !delList.includes(cleanEmail)) delList.push(cleanEmail);
+    if (cleanId && !delList.includes(cleanId)) delList.push(cleanId);
+    localStorage.setItem('cufy_deleted_users', JSON.stringify(delList));
+  } catch (e) {}
+
+  // 3. Delete from LocalStorage user stores
   try {
     const dbStr = localStorage.getItem('cufy_registered_users');
     if (dbStr) {
@@ -826,6 +863,17 @@ export async function deleteCloudUser(userId, userEmail) {
         return uEmail !== cleanEmail && uId !== cleanId;
       });
       localStorage.setItem('cufy_registered_users', JSON.stringify(dbUsers));
+    }
+
+    const payStr = localStorage.getItem('cufy_pending_payments');
+    if (payStr) {
+      let pays = JSON.parse(payStr);
+      pays = pays.filter(p => {
+        const pEmail = (p.userEmail || p.email || '').toLowerCase().trim();
+        const pId = (p.userId || p.id || '').toString().replace(/^(pay_|usr_)/, '');
+        return pEmail !== cleanEmail && pId !== cleanId;
+      });
+      localStorage.setItem('cufy_pending_payments', JSON.stringify(pays));
     }
 
     const activeStr = localStorage.getItem('cufy_active_user');
