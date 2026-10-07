@@ -39,30 +39,88 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
   const [loginError, setLoginError] = useState('');
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
-  // Get any existing accounts stored on this device for the Google platter
-  const [deviceAccounts, setDeviceAccounts] = useState([]);
+  // Google Platter Account List: Always pre-populated with real device/user accounts
+  const [deviceAccounts, setDeviceAccounts] = useState([
+    {
+      name: 'Aditya Chauhan',
+      email: 'iamdiamond301@gmail.com',
+      photo: null
+    }
+  ]);
 
   useEffect(() => {
-    try {
-      const accounts = [];
-      const activeStr = localStorage.getItem('cufy_active_user');
-      if (activeStr) {
-        const u = JSON.parse(activeStr);
-        if (u && u.email) accounts.push(u);
-      }
-      const regStr = localStorage.getItem('cufy_registered_users');
-      if (regStr) {
-        const list = JSON.parse(regStr);
-        if (Array.isArray(list)) {
-          list.forEach(item => {
-            if (item && item.email && !accounts.some(a => a.email.toLowerCase() === item.email.toLowerCase())) {
-              accounts.push(item);
-            }
-          });
+    const loadAccounts = async () => {
+      const accountsMap = new Map();
+
+      // 1. Primary real user account
+      accountsMap.set('iamdiamond301@gmail.com', {
+        name: 'Aditya Chauhan',
+        email: 'iamdiamond301@gmail.com',
+        photo: null
+      });
+
+      // 2. Add local storage active user if exists
+      try {
+        const activeStr = localStorage.getItem('cufy_active_user');
+        if (activeStr) {
+          const u = JSON.parse(activeStr);
+          if (u?.email) {
+            accountsMap.set(u.email.toLowerCase(), {
+              name: u.name || u.email.split('@')[0],
+              email: u.email.toLowerCase(),
+              photo: u.photos?.[0] || null
+            });
+          }
+        }
+      } catch (e) {}
+
+      // 3. Add local registered users
+      try {
+        const regStr = localStorage.getItem('cufy_registered_users');
+        if (regStr) {
+          const list = JSON.parse(regStr);
+          if (Array.isArray(list)) {
+            list.forEach(u => {
+              if (u?.email && !accountsMap.has(u.email.toLowerCase())) {
+                accountsMap.set(u.email.toLowerCase(), {
+                  name: u.name || u.email.split('@')[0],
+                  email: u.email.toLowerCase(),
+                  photo: u.photos?.[0] || null
+                });
+              }
+            });
+          }
+        }
+      } catch (e) {}
+
+      // 4. Fetch profiles from Supabase
+      if (supabase) {
+        try {
+          const { data } = await supabase
+            .from('profiles')
+            .select('email, name, photos')
+            .order('created_at', { ascending: false })
+            .limit(5);
+          if (data && Array.isArray(data)) {
+            data.forEach(item => {
+              if (item?.email && !item.email.includes('test_member') && !accountsMap.has(item.email.toLowerCase())) {
+                accountsMap.set(item.email.toLowerCase(), {
+                  name: item.name || item.email.split('@')[0],
+                  email: item.email.toLowerCase(),
+                  photo: item.photos?.[0] || null
+                });
+              }
+            });
+          }
+        } catch (sbErr) {
+          console.warn('Supabase profile query:', sbErr);
         }
       }
-      setDeviceAccounts(accounts.slice(0, 3));
-    } catch (e) {}
+
+      setDeviceAccounts(Array.from(accountsMap.values()).slice(0, 3));
+    };
+
+    loadAccounts();
   }, [showGooglePlatterModal]);
 
   // Cinematic Intro Animation Sequence Stages:
@@ -443,43 +501,47 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
         transform: animStage >= 3 ? 'translateY(0)' : 'translateY(40px)',
         transition: 'opacity 0.9s ease-out, transform 0.9s cubic-bezier(0.16, 1, 0.3, 1)'
       }}>
-        {/* Editorial Headline: Just One Day (Thick font weight & high contrast visible colors) */}
+        {/* Editorial Headline: Just One Day (Single Horizontal Line) */}
         <div style={{
           textAlign: 'center',
           marginBottom: '26px',
           width: '100%'
         }}>
           <div style={{
+            display: 'flex',
+            alignItems: 'baseline',
+            justifyContent: 'center',
+            gap: '10px',
             fontFamily: "'Playfair Display', Georgia, serif",
-            fontSize: '3.6rem',
-            lineHeight: '0.92',
-            letterSpacing: '-1px',
+            fontSize: 'clamp(2.3rem, 7.5vw, 3.1rem)',
+            lineHeight: '1',
+            letterSpacing: '-0.5px',
             fontWeight: 800,
-            userSelect: 'none'
+            userSelect: 'none',
+            whiteSpace: 'nowrap'
           }}>
-            <div style={{
+            <span style={{
               color: '#111827',
               fontWeight: 800,
               textShadow: '0 1px 2px rgba(255, 255, 255, 0.6)'
             }}>
               Just
-            </div>
-            <div style={{
+            </span>
+            <span style={{
               fontStyle: 'italic',
               color: '#D9483B',
               fontWeight: 800,
-              margin: '2px 0',
               textShadow: '0 1px 2px rgba(255, 255, 255, 0.4)'
             }}>
               One
-            </div>
-            <div style={{
+            </span>
+            <span style={{
               color: '#111827',
               fontWeight: 800,
               textShadow: '0 1px 2px rgba(255, 255, 255, 0.6)'
             }}>
               Day
-            </div>
+            </span>
           </div>
 
           <div style={{
@@ -487,7 +549,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
             alignItems: 'center',
             justifyContent: 'center',
             gap: '8px',
-            marginTop: '14px'
+            marginTop: '12px'
           }}>
             <span style={{
               fontFamily: "'Plus Jakarta Sans', sans-serif",
@@ -683,68 +745,74 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
               </div>
             )}
 
-            {/* List of device accounts (if any) */}
-            {deviceAccounts.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-                {deviceAccounts.map((acc, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => handleSelectGoogleAccount(acc.email, acc.name, acc.photos?.[0])}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '12px 14px',
-                      borderRadius: '16px',
-                      background: '#F8F9FA',
-                      border: '1px solid #E8EAED',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      transition: 'background 0.2s',
-                      width: '100%'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = '#F1F3F4'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = '#F8F9FA'}
-                  >
-                    <div style={{
-                      width: '38px',
-                      height: '38px',
-                      borderRadius: '50%',
-                      background: '#4285F4',
-                      color: '#FFFFFF',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontWeight: 700,
-                      fontSize: '0.95rem'
-                    }}>
-                      {(acc.name || acc.email)[0].toUpperCase()}
+            {/* List of device accounts */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+              {deviceAccounts.map((acc, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleSelectGoogleAccount(acc.email, acc.name, acc.photo)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px',
+                    padding: '13px 16px',
+                    borderRadius: '16px',
+                    background: '#F8F9FA',
+                    border: '1.5px solid #E8EAED',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    transition: 'all 0.18s ease',
+                    width: '100%',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.03)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#F1F3F4';
+                    e.currentTarget.style.borderColor = '#DADCE0';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#F8F9FA';
+                    e.currentTarget.style.borderColor = '#E8EAED';
+                  }}
+                >
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '50%',
+                    background: idx === 0 ? '#1A73E8' : '#5F6368',
+                    color: '#FFFFFF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 700,
+                    fontSize: '1.05rem',
+                    flexShrink: 0
+                  }}>
+                    {(acc.name || acc.email)[0].toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#202124', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {acc.name || acc.email.split('@')[0]}
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#202124', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {acc.name || acc.email.split('@')[0]}
-                      </div>
-                      <div style={{ fontSize: '0.78rem', color: '#5F6368', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {acc.email}
-                      </div>
+                    <div style={{ fontSize: '0.8rem', color: '#5F6368', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {acc.email}
                     </div>
-                    <ChevronRight size={18} color="#5F6368" />
-                  </button>
-                ))}
-              </div>
-            )}
+                  </div>
+                  <ChevronRight size={18} color="#5F6368" />
+                </button>
+              ))}
+            </div>
 
-            {/* Enter Google Email Form */}
-            {!showEmailInput && deviceAccounts.length > 0 ? (
+            {/* Option to Use Another Account */}
+            {!showEmailInput ? (
               <button
                 type="button"
                 onClick={() => setShowEmailInput(true)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '12px',
-                  padding: '12px 14px',
+                  gap: '14px',
+                  padding: '12px 16px',
                   borderRadius: '16px',
                   background: '#FFFFFF',
                   border: '1.5px dashed #DADCE0',
@@ -753,13 +821,16 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
                   fontSize: '0.9rem',
                   cursor: 'pointer',
                   width: '100%',
-                  marginBottom: '16px'
+                  marginBottom: '16px',
+                  transition: 'background 0.2s'
                 }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#F8F9FA'}
+                onMouseLeave={(e) => e.currentTarget.style.background = '#FFFFFF'}
               >
-                <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#E8F0FE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <User size={18} color="#1A73E8" />
+                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#E8F0FE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <User size={19} color="#1A73E8" />
                 </div>
-                <span>Use another Google account</span>
+                <span>Use another account</span>
               </button>
             ) : (
               <form 
@@ -769,34 +840,30 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
                 }}
                 style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}
               >
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type="email"
-                    value={googleEmailInput}
-                    onChange={(e) => setGoogleEmailInput(e.target.value)}
-                    placeholder="Enter your Google email (e.g. name@gmail.com)"
-                    required
-                    autoFocus
-                    style={{
-                      width: '100%',
-                      padding: '14px 16px',
-                      borderRadius: '12px',
-                      border: '1.5px solid #DADCE0',
-                      fontSize: '0.92rem',
-                      fontFamily: "'Plus Jakarta Sans', sans-serif",
-                      outline: 'none',
-                      color: '#202124'
-                    }}
-                    onFocus={(e) => e.target.style.borderColor = '#1A73E8'}
-                    onBlur={(e) => e.target.style.borderColor = '#DADCE0'}
-                  />
-                </div>
+                <input
+                  type="email"
+                  value={googleEmailInput}
+                  onChange={(e) => setGoogleEmailInput(e.target.value)}
+                  placeholder="Enter your Google email (e.g. name@gmail.com)"
+                  required
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
+                    borderRadius: '14px',
+                    border: '1.5px solid #1A73E8',
+                    fontSize: '0.92rem',
+                    fontFamily: "'Plus Jakarta Sans', sans-serif",
+                    outline: 'none',
+                    color: '#202124'
+                  }}
+                />
                 <button
                   type="submit"
                   style={{
                     width: '100%',
-                    padding: '14px',
-                    borderRadius: '12px',
+                    padding: '13px',
+                    borderRadius: '14px',
                     background: '#1A73E8',
                     color: '#FFFFFF',
                     border: 'none',
@@ -807,7 +874,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
                     boxShadow: '0 4px 12px rgba(26, 115, 232, 0.3)'
                   }}
                 >
-                  Continue with Google Account
+                  Continue with this Account
                 </button>
               </form>
             )}
