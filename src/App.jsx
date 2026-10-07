@@ -121,41 +121,72 @@ export default function App() {
             const cleanEmail = parsed.email.toLowerCase().trim();
             const { data: dbProf } = await supabase
               .from('profiles')
-              .select('id, is_verified, account_status')
+              .select('id, is_verified, account_status, prompt2_answer, photos')
               .eq('email', cleanEmail)
               .maybeSingle();
 
-            if (dbProf) {
-              const { data: mem } = await supabase
-                .from('memberships')
-                .select('*')
-                .eq('user_id', dbProf.id)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-
-              const isVerified = Boolean(dbProf.is_verified || (mem && mem.status === 'approved'));
-              let isExpired = false;
-              if (mem?.expires_at && new Date(mem.expires_at) <= now && parsed.gender !== 'Woman') {
-                isExpired = true;
-              }
-
-              let updatedStatus = parsed.status;
-              if (dbProf.account_status === 'Suspended') updatedStatus = 'suspended';
-              else if (isExpired) updatedStatus = 'expired';
-              else if (isVerified) updatedStatus = 'approved';
-              else updatedStatus = 'pending_approval';
-
-              parsed = {
-                ...parsed,
-                status: updatedStatus,
-                is_verified: isVerified,
-                startsAt: mem?.starts_at || parsed.startsAt || null,
-                expiresAt: mem?.expires_at || parsed.expiresAt || null,
-                plan: mem?.plan_type ? formatPlanName(mem.plan_type) : parsed.plan
-              };
-              localStorage.setItem('cufy_active_user', JSON.stringify(parsed));
+            // 1. If profile is missing or marked Deleted: user was permanently deleted by admin!
+            if (!dbProf || dbProf.account_status === 'Deleted' || (dbProf.prompt2_answer && dbProf.prompt2_answer.startsWith('[DELETED]:'))) {
+              localStorage.removeItem('cufy_active_user');
+              setUserProfile(null);
+              setViewState('welcome');
+              setIsAdminOpen(false);
+              return;
             }
+
+            const { data: mem } = await supabase
+              .from('memberships')
+              .select('*')
+              .eq('user_id', dbProf.id)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (mem?.status === 'deleted') {
+              localStorage.removeItem('cufy_active_user');
+              setUserProfile(null);
+              setViewState('welcome');
+              setIsAdminOpen(false);
+              return;
+            }
+
+            // 2. Check rejection
+            const isDbRejected = mem?.status === 'rejected' || (dbProf?.prompt2_answer && dbProf.prompt2_answer.startsWith('[REJECTION]:'));
+            let rejectionReason = parsed.rejectionReason || '';
+            if (dbProf?.prompt2_answer && dbProf.prompt2_answer.startsWith('[REJECTION]:')) {
+              rejectionReason = dbProf.prompt2_answer.replace('[REJECTION]:', '').trim();
+            }
+
+            // 3. Expiry check
+            let isExpired = false;
+            if (mem?.expires_at && new Date(mem.expires_at) <= now && parsed.gender !== 'Woman') {
+              isExpired = true;
+            }
+
+            const isVerified = Boolean(dbProf.is_verified || (mem && mem.status === 'approved'));
+
+            let updatedStatus = parsed.status;
+            if (dbProf.account_status === 'Suspended') updatedStatus = 'suspended';
+            else if (isDbRejected) updatedStatus = 'rejected';
+            else if (isExpired) updatedStatus = 'expired';
+            else if (isVerified || parsed.gender === 'Woman') updatedStatus = 'approved';
+            else updatedStatus = 'pending_approval';
+
+            const realDbPhotos = (dbProf.photos && Array.isArray(dbProf.photos) && dbProf.photos.length > 0)
+              ? dbProf.photos.filter(u => typeof u === 'string' && !u.includes('unsplash.com'))
+              : (parsed.photos ? parsed.photos.filter(u => typeof u === 'string' && !u.includes('unsplash.com')) : []);
+
+            parsed = {
+              ...parsed,
+              status: updatedStatus,
+              is_verified: isVerified,
+              rejectionReason,
+              photos: realDbPhotos,
+              startsAt: mem?.starts_at || parsed.startsAt || null,
+              expiresAt: mem?.expires_at || parsed.expiresAt || null,
+              plan: mem?.plan_type ? formatPlanName(mem.plan_type) : parsed.plan
+            };
+            localStorage.setItem('cufy_active_user', JSON.stringify(parsed));
           } catch (sbErr) {
             console.warn('Session refresh Supabase check:', sbErr);
           }
@@ -207,7 +238,7 @@ export default function App() {
     }
   }, []);
 
-  // Listen for real-time approval events across tabs/window
+  // Listen for real-time approval, rejection, and deletion events across tabs/window
   useEffect(() => {
     const handleApprovedEvent = (e) => {
       const detail = e?.detail;
@@ -224,7 +255,7 @@ export default function App() {
       const detail = e?.detail;
       const currentEmail = userProfile?.email?.toLowerCase().trim();
       if (!detail || !detail.email || (currentEmail && detail.email.toLowerCase() === currentEmail)) {
-        const reason = detail?.reason || 'Verification details could not be verified by admin.';
+        const reason = detail?.reason || 'Access revoked by administrator.';
         const rejectedUser = {
           ...userProfile,
           status: 'rejected',
@@ -236,7 +267,7 @@ export default function App() {
 
         if ('Notification' in window && Notification.permission === 'granted') {
           try {
-            new Notification('⚠️ Verification Rejected', {
+            new Notification('⚠️ Access Revoked / Rejected', {
               body: `Reason: ${reason}. Tap to fix and re-upload.`,
               icon: '/photos/cufylogo.jpg'
             });
@@ -245,18 +276,31 @@ export default function App() {
       }
     };
 
+    const handleDeletedEvent = (e) => {
+      const detail = e?.detail;
+      const currentEmail = userProfile?.email?.toLowerCase().trim();
+      if (!detail || !detail.email || (currentEmail && detail.email.toLowerCase() === currentEmail)) {
+        localStorage.removeItem('cufy_active_user');
+        setUserProfile(null);
+        setViewState('welcome');
+        alert('Your account has been deleted by administrator.');
+      }
+    };
+
     window.addEventListener('cufy_user_approved', handleApprovedEvent);
     window.addEventListener('cufy_user_rejected', handleRejectedEvent);
+    window.addEventListener('cufy_user_deleted', handleDeletedEvent);
     return () => {
       window.removeEventListener('cufy_user_approved', handleApprovedEvent);
       window.removeEventListener('cufy_user_rejected', handleRejectedEvent);
+      window.removeEventListener('cufy_user_deleted', handleDeletedEvent);
     };
   }, [userProfile]);
 
-  // Real-time polling when account is pending approval (unlocks automatically in ~3s once Admin approves or alerts if rejected!)
+  // Real-time status polling for ALL logged-in non-admin users (kicks out deleted, suspended, or rejected members in ~3s!)
   useEffect(() => {
-    const isPending = userProfile && (userProfile.status === 'pending_approval' || userProfile.status === 'pending') && !userProfile.isAdmin;
-    if (!isPending || !userProfile?.email || !supabase) return;
+    const shouldPoll = userProfile && userProfile.email && !userProfile.isAdmin;
+    if (!shouldPoll || !supabase) return;
 
     const pollInterval = setInterval(async () => {
       try {
@@ -267,72 +311,114 @@ export default function App() {
           .eq('email', cleanEmail)
           .maybeSingle();
 
+        // 1. Account was permanently deleted by admin
+        if (!dbProf || dbProf.account_status === 'Deleted' || (dbProf.prompt2_answer && dbProf.prompt2_answer.startsWith('[DELETED]:'))) {
+          localStorage.removeItem('cufy_active_user');
+          setUserProfile(null);
+          setViewState('welcome');
+          alert('Your account has been deleted by administrator.');
+          return;
+        }
+
+        // 2. Account was deactivated / suspended by admin
+        if (dbProf.account_status === 'Suspended') {
+          if (userProfile.status !== 'suspended') {
+            const suspendedUser = { ...userProfile, status: 'suspended', is_verified: false };
+            setUserProfile(suspendedUser);
+            localStorage.setItem('cufy_active_user', JSON.stringify(suspendedUser));
+          }
+          return;
+        }
+
         const { data: mem } = await supabase
           .from('memberships')
           .select('*')
-          .eq('user_id', dbProf?.id)
+          .eq('user_id', dbProf.id)
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
 
-        // 1. Check if rejected
+        if (mem?.status === 'deleted') {
+          localStorage.removeItem('cufy_active_user');
+          setUserProfile(null);
+          setViewState('welcome');
+          alert('Your account has been deleted by administrator.');
+          return;
+        }
+
+        // 3. Account was rejected / revoked by admin with reason
         const isDbRejected = mem?.status === 'rejected' || (dbProf?.prompt2_answer && dbProf.prompt2_answer.startsWith('[REJECTION]:'));
         if (isDbRejected) {
           let reason = 'Payment receipt or profile information could not be verified.';
           if (dbProf?.prompt2_answer && dbProf.prompt2_answer.startsWith('[REJECTION]:')) {
             reason = dbProf.prompt2_answer.replace('[REJECTION]:', '').trim();
           }
-          const rejectedUser = {
-            ...userProfile,
-            status: 'rejected',
-            is_verified: false,
-            rejectionReason: reason
-          };
-          setUserProfile(rejectedUser);
-          localStorage.setItem('cufy_active_user', JSON.stringify(rejectedUser));
+          if (userProfile.status !== 'rejected' || userProfile.rejectionReason !== reason) {
+            const rejectedUser = {
+              ...userProfile,
+              status: 'rejected',
+              is_verified: false,
+              rejectionReason: reason
+            };
+            setUserProfile(rejectedUser);
+            localStorage.setItem('cufy_active_user', JSON.stringify(rejectedUser));
 
-          if ('Notification' in window && Notification.permission === 'granted') {
-            try {
-              new Notification('⚠️ Verification Rejected', {
-                body: `Reason: ${reason}. Tap to fix and re-upload.`,
-                icon: '/photos/cufylogo.jpg'
-              });
-            } catch (nErr) {}
+            if ('Notification' in window && Notification.permission === 'granted') {
+              try {
+                new Notification('⚠️ Access Revoked / Rejected', {
+                  body: `Reason: ${reason}. Tap to fix and re-upload.`,
+                  icon: '/photos/cufylogo.jpg'
+                });
+              } catch (nErr) {}
+            }
           }
           return;
         }
 
-        // 2. Check if approved
-        if (dbProf && (dbProf.is_verified || mem?.status === 'approved')) {
-          const now = new Date();
-          const startsAt = mem?.starts_at || now.toISOString();
-          const expiresAt = mem?.expires_at || new Date(now.getTime() + 30 * 86400000).toISOString();
+        // 4. Expiry check
+        const now = new Date();
+        const isExpired = mem?.expires_at && new Date(mem.expires_at) <= now && userProfile.gender !== 'Woman';
+        if (isExpired) {
+          if (userProfile.status !== 'expired') {
+            const expiredUser = { ...userProfile, status: 'expired' };
+            setUserProfile(expiredUser);
+            localStorage.setItem('cufy_active_user', JSON.stringify(expiredUser));
+          }
+          return;
+        }
 
-          const approvedUser = {
-            ...userProfile,
-            status: 'approved',
-            is_verified: true,
-            startsAt,
-            expiresAt,
-            plan: mem?.plan_type ? formatPlanName(mem.plan_type) : userProfile.plan
-          };
+        // 5. Check if approved
+        if (dbProf && (dbProf.is_verified || mem?.status === 'approved' || userProfile.gender === 'Woman')) {
+          if (userProfile.status !== 'approved') {
+            const startsAt = mem?.starts_at || now.toISOString();
+            const expiresAt = mem?.expires_at || new Date(now.getTime() + 30 * 86400000).toISOString();
 
-          setUserProfile(approvedUser);
-          localStorage.setItem('cufy_active_user', JSON.stringify(approvedUser));
+            const approvedUser = {
+              ...userProfile,
+              status: 'approved',
+              is_verified: true,
+              startsAt,
+              expiresAt,
+              plan: mem?.plan_type ? formatPlanName(mem.plan_type) : userProfile.plan
+            };
 
-          try {
-            const dbStr = localStorage.getItem('cufy_registered_users');
-            if (dbStr) {
-              let dbUsers = JSON.parse(dbStr);
-              dbUsers = dbUsers.map(u => u.email?.toLowerCase() === cleanEmail ? { ...u, ...approvedUser } : u);
-              localStorage.setItem('cufy_registered_users', JSON.stringify(dbUsers));
-            }
-          } catch (e) {}
+            setUserProfile(approvedUser);
+            localStorage.setItem('cufy_active_user', JSON.stringify(approvedUser));
 
-          setShowWelcomeModal(true);
+            try {
+              const dbStr = localStorage.getItem('cufy_registered_users');
+              if (dbStr) {
+                let dbUsers = JSON.parse(dbStr);
+                dbUsers = dbUsers.map(u => u.email?.toLowerCase() === cleanEmail ? { ...u, ...approvedUser } : u);
+                localStorage.setItem('cufy_registered_users', JSON.stringify(dbUsers));
+              }
+            } catch (e) {}
+
+            setShowWelcomeModal(true);
+          }
         }
       } catch (err) {
-        console.warn('Approval polling error:', err);
+        console.warn('Real-time polling note:', err);
       }
     }, 3000);
 

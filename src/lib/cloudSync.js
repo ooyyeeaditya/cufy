@@ -162,43 +162,66 @@ export async function syncUserToCloud(record) {
       }
     } catch (aErr) {}
 
-    const targetUuid = authUserId || (record.id && record.id.length === 36 ? record.id : generateUUID());
-
-    await supabase
+    // Check if profile already exists in Supabase
+    const { data: existingProf } = await supabase
       .from('profiles')
-      .upsert({
-        id: targetUuid,
-        email: userEmail,
-        phone: syncPayload.phone,
-        name: syncPayload.name,
-        gender: syncPayload.gender,
-        age: syncPayload.age,
-        location: syncPayload.city,
-        account_status: syncPayload.status === 'suspended' ? 'Suspended' : 'Active',
-        is_verified: syncPayload.status === 'approved',
-        photos: syncPayload.photos,
-        bio: record.bio || '',
-        prompt1: record.prompt1 || '',
-        prompt1_answer: record.prompt1Answer || record.prompt1_answer || '',
-        prompt2: record.prompt2 || '',
-        prompt2_answer: record.prompt2Answer || record.prompt2_answer || '',
-        height_feet: record.heightFeet || 5,
-        height_inches: record.heightInches || 8,
-        ethnicity: record.ethnicity || ['South Asian'],
-        intent: record.intent || 'Serious relationship',
-        religion: record.religion || 'Spiritual',
-        drinking: record.drinking || 'Socially',
-        smoking: record.smoking || 'Never'
-      }, { onConflict: 'email' });
-
-    // Memberships Table
-    const { data: prof } = await supabase
-      .from('profiles')
-      .select('id')
+      .select('id, photos')
       .eq('email', userEmail)
       .maybeSingle();
 
-    if (prof?.id) {
+    // Clean photos: filter out any fake/stock unsplash URLs
+    const realPhotos = (syncPayload.photos || []).filter(u => typeof u === 'string' && u.length > 5 && !u.includes('unsplash.com'));
+
+    const profileData = {
+      email: userEmail,
+      phone: syncPayload.phone,
+      name: syncPayload.name,
+      gender: syncPayload.gender,
+      age: syncPayload.age,
+      location: syncPayload.city,
+      account_status: syncPayload.status === 'suspended' ? 'Suspended' : 'Active',
+      is_verified: syncPayload.status === 'approved',
+      photos: realPhotos,
+      bio: record.bio || '',
+      prompt1: record.prompt1 || '',
+      prompt1_answer: record.prompt1Answer || record.prompt1_answer || '',
+      prompt2: record.prompt2 || '',
+      prompt2_answer: record.prompt2Answer || record.prompt2_answer || '',
+      height_feet: record.heightFeet || 5,
+      height_inches: record.heightInches || 8,
+      ethnicity: record.ethnicity || ['South Asian'],
+      intent: record.intent || 'Serious relationship',
+      religion: record.religion || 'Spiritual',
+      drinking: record.drinking || 'Socially',
+      smoking: record.smoking || 'Never',
+      updated_at: new Date().toISOString()
+    };
+
+    let finalProfileId = null;
+
+    if (existingProf?.id) {
+      finalProfileId = existingProf.id;
+      // If new real photos were uploaded, use them; otherwise keep existing real photos
+      if (realPhotos.length === 0 && existingProf.photos && existingProf.photos.length > 0) {
+        profileData.photos = existingProf.photos.filter(u => typeof u === 'string' && !u.includes('unsplash.com'));
+      }
+      await supabase
+        .from('profiles')
+        .update(profileData)
+        .eq('id', existingProf.id);
+    } else {
+      const targetUuid = authUserId || (record.id && record.id.length === 36 ? record.id : generateUUID());
+      finalProfileId = targetUuid;
+      await supabase
+        .from('profiles')
+        .insert({
+          id: targetUuid,
+          ...profileData
+        });
+    }
+
+    // Memberships Table
+    if (finalProfileId) {
       let dbPlanType = '1_month';
       const pl = (syncPayload.plan || '').toLowerCase();
       if (syncPayload.gender === 'Woman') dbPlanType = 'free_women';
@@ -207,17 +230,36 @@ export async function syncUserToCloud(record) {
       else if (pl.includes('15_days') || pl.includes('15 days')) dbPlanType = '15_days';
       else dbPlanType = '1_month';
 
-      await supabase
+      const cleanScreenshot = (syncPayload.paymentProofUrl && typeof syncPayload.paymentProofUrl === 'string' && !syncPayload.paymentProofUrl.includes('unsplash.com'))
+        ? syncPayload.paymentProofUrl
+        : null;
+
+      const memPayload = {
+        user_id: finalProfileId,
+        plan_type: dbPlanType,
+        price: syncPayload.gender === 'Woman' ? 0 : (record.planPrice || 799),
+        screenshot_url: cleanScreenshot,
+        status: syncPayload.status === 'approved' ? 'approved' : 'pending',
+        starts_at: syncPayload.startsAt || null,
+        expires_at: syncPayload.expiresAt || null
+      };
+
+      const { data: existingMem } = await supabase
         .from('memberships')
-        .upsert({
-          user_id: prof.id,
-          plan_type: dbPlanType,
-          price: syncPayload.gender === 'Woman' ? 0 : (record.planPrice || 799),
-          screenshot_url: syncPayload.paymentProofUrl,
-          status: syncPayload.status === 'approved' ? 'approved' : 'pending',
-          starts_at: syncPayload.startsAt || null,
-          expires_at: syncPayload.expiresAt || null
-        }, { onConflict: 'user_id' });
+        .select('id')
+        .eq('user_id', finalProfileId)
+        .maybeSingle();
+
+      if (existingMem?.id) {
+        await supabase
+          .from('memberships')
+          .update(memPayload)
+          .eq('id', existingMem.id);
+      } else {
+        await supabase
+          .from('memberships')
+          .insert(memPayload);
+      }
     }
   } catch (err) {
     console.log('Supabase sync note:', err);
@@ -260,12 +302,17 @@ export async function fetchAllCloudUsers() {
     if (profiles && Array.isArray(profiles) && profiles.length > 0) {
       profiles.forEach(p => {
         if (!p.email || p.email === 'cupid.livepro@gmail.com') return;
+        // Strictly exclude accounts deleted by admin
+        if (p.account_status === 'Deleted' || (p.prompt2_answer && p.prompt2_answer.startsWith('[DELETED]:'))) return;
+
         const cleanEmail = p.email.toLowerCase().trim();
         const mem = memberships ? memberships.find(m => m.user_id === p.id) : null;
+        if (mem?.status === 'deleted') return;
         
         const existingIdx = cloudUsers.findIndex(cu => cu.email && cu.email.toLowerCase() === cleanEmail);
         const existing = existingIdx >= 0 ? cloudUsers[existingIdx] : null;
-        const proof = mem?.screenshot_url || existing?.paymentProofUrl || existing?.paymentProof || null;
+        let proof = mem?.screenshot_url || existing?.paymentProofUrl || existing?.paymentProof || null;
+        if (proof && typeof proof === 'string' && proof.includes('unsplash.com')) proof = null;
 
         // STRICT VERIFICATION CHECK:
         // Must be verified in profile OR approved in memberships. account_status defaults to Active and does NOT mean approved!
@@ -309,6 +356,12 @@ export async function fetchAllCloudUsers() {
         const planName = formatPlanName(rawPlan);
         const planDays = getPlanDurationDays(rawPlan);
 
+        const realUserPhotos = (p.photos && Array.isArray(p.photos) && p.photos.filter(Boolean).length > 0)
+          ? p.photos.filter(Boolean).filter(u => typeof u === 'string' && !u.includes('unsplash.com'))
+          : (existing?.photos && existing.photos.filter(Boolean).length > 0
+              ? existing.photos.filter(Boolean).filter(u => typeof u === 'string' && !u.includes('unsplash.com'))
+              : []);
+
         const mapped = {
           id: p.id,
           name: p.name || existing?.name || 'Member',
@@ -343,7 +396,7 @@ export async function fetchAllCloudUsers() {
           expiresAt: expiresAt,
           createdAt: p.created_at || existing?.createdAt || null,
           registered: p.created_at ? new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : (existing?.registered || 'Today'),
-          photos: (p.photos && Array.isArray(p.photos) && p.photos.filter(Boolean).length > 0) ? p.photos.filter(Boolean) : (existing?.photos && existing.photos.filter(Boolean).length > 0 ? existing.photos.filter(Boolean) : []),
+          photos: realUserPhotos,
           paymentProofUrl: proof,
           matches: existing?.matches || [],
           payments: [{
@@ -372,6 +425,7 @@ export async function fetchAllCloudUsers() {
     if (localStr) {
       const localUsers = JSON.parse(localStr);
       localUsers.forEach(lu => {
+        if (lu.account_status === 'Deleted' || lu.status === 'deleted') return;
         if (!cloudUsers.some(cu => cu.email && lu.email && cu.email.toLowerCase() === lu.email.toLowerCase())) {
           cloudUsers.unshift(lu);
         }
@@ -683,25 +737,38 @@ export async function backfillAllUsersToSupabase() {
         }
       }
 
-      // 2. Upsert in Profiles Table
-      const targetUuid = authId || (user.id && user.id.length === 36 ? user.id : generateUUID());
-      const isApproved = Boolean(user.status === 'approved' || user.is_verified);
-
-      await supabase
+      // 2. Update or Insert in Profiles Table safely without onConflict error
+      const { data: existingProf } = await supabase
         .from('profiles')
-        .upsert({
-          id: targetUuid,
-          email: cleanEmail,
-          phone: user.phone || '+91 9876543210',
-          name: user.name || 'Member',
-          gender: user.gender || 'Man',
-          age: user.age || 24,
-          location: user.city || 'Greater Noida',
-          account_status: user.status === 'suspended' ? 'Suspended' : 'Active',
-          is_verified: isApproved,
-          photos: (user.photos && Array.isArray(user.photos) && user.photos.filter(Boolean).length > 0) ? user.photos.filter(Boolean) : [],
-          is_admin: Boolean(user.isAdmin)
-        }, { onConflict: 'email' });
+        .select('id')
+        .eq('email', cleanEmail)
+        .maybeSingle();
+
+      const isApproved = Boolean(user.status === 'approved' || user.is_verified);
+      const cleanPhotos = (user.photos && Array.isArray(user.photos))
+        ? user.photos.filter(Boolean).filter(u => typeof u === 'string' && !u.includes('unsplash.com'))
+        : [];
+
+      const profData = {
+        email: cleanEmail,
+        phone: user.phone || '+91 9876543210',
+        name: user.name || 'Member',
+        gender: user.gender || 'Man',
+        age: user.age || 24,
+        location: user.city || 'Greater Noida',
+        account_status: user.status === 'suspended' ? 'Suspended' : 'Active',
+        is_verified: isApproved,
+        photos: cleanPhotos,
+        is_admin: Boolean(user.isAdmin),
+        updated_at: new Date().toISOString()
+      };
+
+      if (existingProf?.id) {
+        await supabase.from('profiles').update(profData).eq('id', existingProf.id);
+      } else {
+        const targetUuid = authId || (user.id && user.id.length === 36 ? user.id : generateUUID());
+        await supabase.from('profiles').insert({ id: targetUuid, ...profData });
+      }
 
       successCount++;
     } catch (err) {
@@ -715,18 +782,33 @@ export async function backfillAllUsersToSupabase() {
 // Permanently delete user from Supabase and LocalStorage
 export async function deleteCloudUser(userId, userEmail) {
   const cleanEmail = sanitizeEmail(userEmail);
+  const cleanId = userId ? userId.toString().replace(/^(pay_|usr_)/, '') : null;
   
-  // 1. Delete from Supabase
+  // 1. Mark as Deleted in Supabase (Guaranteed to succeed over UPDATE permissions)
   try {
-    if (userId) {
-      await supabase.from('memberships').delete().eq('user_id', userId);
-      await supabase.from('profiles').delete().eq('id', userId);
+    const deletePayload = {
+      account_status: 'Deleted',
+      is_verified: false,
+      photos: [],
+      bio: '',
+      prompt2_answer: `[DELETED]: Account removed by admin at ${new Date().toISOString()}`,
+      updated_at: new Date().toISOString()
+    };
+
+    if (cleanEmail) {
+      await supabase.from('profiles').update(deletePayload).eq('email', cleanEmail);
+    }
+    if (cleanId && cleanId.length === 36) {
+      await supabase.from('profiles').update(deletePayload).eq('id', cleanId);
+      await supabase.from('memberships').update({ status: 'deleted', screenshot_url: null }).eq('user_id', cleanId);
+    }
+
+    // Also attempt hard DELETE in case database policies allow it
+    if (cleanId && cleanId.length === 36) {
+      await supabase.from('memberships').delete().eq('user_id', cleanId);
+      await supabase.from('profiles').delete().eq('id', cleanId);
     }
     if (cleanEmail) {
-      const { data: prof } = await supabase.from('profiles').select('id').eq('email', cleanEmail).maybeSingle();
-      if (prof?.id) {
-        await supabase.from('memberships').delete().eq('user_id', prof.id);
-      }
       await supabase.from('profiles').delete().eq('email', cleanEmail);
     }
   } catch (err) {
@@ -740,10 +822,12 @@ export async function deleteCloudUser(userId, userEmail) {
       let dbUsers = JSON.parse(dbStr);
       dbUsers = dbUsers.filter(u => {
         const uEmail = (u.email || '').toLowerCase().trim();
-        return uEmail !== cleanEmail && u.id !== userId;
+        const uId = (u.id || '').toString().replace(/^(pay_|usr_)/, '');
+        return uEmail !== cleanEmail && uId !== cleanId;
       });
       localStorage.setItem('cufy_registered_users', JSON.stringify(dbUsers));
     }
+
     const activeStr = localStorage.getItem('cufy_active_user');
     if (activeStr) {
       const active = JSON.parse(activeStr);
@@ -752,11 +836,29 @@ export async function deleteCloudUser(userId, userEmail) {
       }
     }
   } catch (err) {}
+
+  // 3. Broadcast Deletion across all open tabs, devices & app instances
+  if (syncChannel) {
+    try {
+      syncChannel.postMessage({
+        type: 'USER_DELETED',
+        email: cleanEmail,
+        id: cleanId
+      });
+    } catch (e) {}
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('cufy_user_deleted', {
+      detail: { email: cleanEmail, id: cleanId }
+    }));
+  }
 }
 
 // Revoke user access with an explicit reason and move them to rejected
 export async function revokeCloudUser(userId, userEmail, reason = 'Access revoked by administrator.') {
-  return await updateCloudUserStatus(userId, userEmail, 'rejected', {
+  const cleanId = userId ? userId.toString().replace(/^(pay_|usr_)/, '') : null;
+  return await updateCloudUserStatus(cleanId, userEmail, 'rejected', {
     rejectionReason: reason
   });
 }

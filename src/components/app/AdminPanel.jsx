@@ -123,10 +123,11 @@ const REVOKE_REASONS = [
   }
 ];
 
-// Helper: Real User DP Avatar (with initials fallback, never stock couple photos)
+// Helper: Real User DP Avatar (with initials fallback, never stock couple or unsplash photos)
 function UserAvatar({ user, size = 46, onClick }) {
   const [imgError, setImgError] = useState(false);
-  const photo = user?.photos?.[0] || user?.photo;
+  const rawPhoto = user?.photos?.[0] || user?.photo;
+  const photo = (rawPhoto && typeof rawPhoto === 'string' && !rawPhoto.includes('unsplash.com')) ? rawPhoto : null;
   const initials = (user?.name || user?.userName || 'Member')
     .split(' ')
     .filter(Boolean)
@@ -184,7 +185,7 @@ function ScreenshotThumbnail({ pay, onClick }) {
   const [imgError, setImgError] = useState(false);
   const isWoman = pay?.gender === 'Woman';
   const url = pay?.screenshotUrl;
-  const hasProof = Boolean(url && url.length > 5 && !imgError);
+  const hasProof = Boolean(url && url.length > 5 && !url.includes('unsplash.com') && !imgError);
 
   if (isWoman) {
     return (
@@ -603,8 +604,9 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
     setIsDeletingLoading(true);
 
     const target = deleteTarget;
-    const targetUserId = target.userId || target.id;
-    const targetEmail = target.userEmail || target.email;
+    const rawId = (target.userId || target.id || '').toString();
+    const cleanUserId = rawId.replace(/^pay_/, '');
+    const targetEmail = (target.userEmail || target.email || '').toLowerCase().trim();
 
     let finalReason = '';
     if (deleteReasonId === 'custom') {
@@ -616,11 +618,41 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
 
     try {
       if (deleteMode === 'permanent') {
-        // Permanently wipe from Supabase and LocalStorage
-        await deleteCloudUser(targetUserId, targetEmail);
+        // 1. Immediately remove from local state so UI updates instantly
+        setPendingPayments(prev => prev.filter(p => {
+          const pEmail = (p.userEmail || '').toLowerCase().trim();
+          const pId = (p.userId || p.id || '').toString().replace(/^pay_/, '');
+          return pEmail !== targetEmail && pId !== cleanUserId;
+        }));
+        setUsersList(prev => prev.filter(u => {
+          const uEmail = (u.email || '').toLowerCase().trim();
+          const uId = (u.id || '').toString().replace(/^pay_/, '');
+          return uEmail !== targetEmail && uId !== cleanUserId;
+        }));
+
+        // 2. Permanently wipe in Supabase and broadcast
+        await deleteCloudUser(cleanUserId, targetEmail);
       } else {
-        // Revoke access and move to Rejected with reason recorded
-        await revokeCloudUser(targetUserId, targetEmail, finalReason);
+        // 1. Immediately move to rejected in local state
+        setPendingPayments(prev => prev.map(p => {
+          const pEmail = (p.userEmail || '').toLowerCase().trim();
+          const pId = (p.userId || p.id || '').toString().replace(/^pay_/, '');
+          if (pEmail === targetEmail || pId === cleanUserId) {
+            return { ...p, status: 'rejected', rejectionReason: finalReason };
+          }
+          return p;
+        }));
+        setUsersList(prev => prev.map(u => {
+          const uEmail = (u.email || '').toLowerCase().trim();
+          const uId = (u.id || '').toString().replace(/^pay_/, '');
+          if (uEmail === targetEmail || uId === cleanUserId) {
+            return { ...u, status: 'rejected', rejectionReason: finalReason, is_verified: false };
+          }
+          return u;
+        }));
+
+        // 2. Revoke access and move to Rejected with reason recorded
+        await revokeCloudUser(cleanUserId, targetEmail, finalReason);
       }
 
       await loadUsers();
@@ -2342,47 +2374,60 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                 </div>
 
                 {/* 1. Full Photo Gallery Carousel with Thumbnails */}
-                <div style={{ marginBottom: '16px' }}>
-                  <div style={{ width: '100%', height: '260px', borderRadius: '20px', overflow: 'hidden', background: '#18181B', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {selectedProfileUser.photos && selectedProfileUser.photos[activePhotoIdx] ? (
-                      <img 
-                        src={selectedProfileUser.photos[activePhotoIdx]} 
-                        alt={selectedProfileUser.userName || selectedProfileUser.name}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                      />
-                    ) : (
-                      <div style={{ color: '#FFFFFF', fontWeight: 900, fontSize: '2.5rem' }}>
-                        {(selectedProfileUser.userName || selectedProfileUser.name || 'Member').slice(0, 2).toUpperCase()}
-                      </div>
-                    )}
-                    <div style={{ position: 'absolute', bottom: '8px', right: '8px', background: 'rgba(9,9,11,0.7)', color: '#FFFFFF', padding: '3px 8px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 800 }}>
-                      Photo {(activePhotoIdx || 0) + 1} of {selectedProfileUser.photos?.length || 1}
-                    </div>
-                  </div>
+                {(() => {
+                  const realPhotos = (selectedProfileUser.photos || [])
+                    .filter(p => typeof p === 'string' && p.length > 5 && !p.includes('unsplash.com'));
+                  const currentPhoto = realPhotos[activePhotoIdx] || realPhotos[0];
 
-                  {/* Thumbnail Row */}
-                  {selectedProfileUser.photos && selectedProfileUser.photos.length > 1 && (
-                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
-                      {selectedProfileUser.photos.map((ph, idx) => (
-                        <div
-                          key={idx}
-                          onClick={() => setActivePhotoIdx(idx)}
-                          style={{
-                            width: '50px', height: '50px',
-                            borderRadius: '12px',
-                            overflow: 'hidden',
-                            border: activePhotoIdx === idx ? '2.5px solid #FF3B30' : '1px solid #E4E4E7',
-                            cursor: 'pointer',
-                            flexShrink: 0
-                          }}
-                        >
-                          <img src={ph} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  return (
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{ width: '100%', height: '260px', borderRadius: '20px', overflow: 'hidden', background: '#18181B', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {currentPhoto ? (
+                          <img 
+                            src={currentPhoto} 
+                            alt={selectedProfileUser.userName || selectedProfileUser.name}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                          />
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', color: '#A1A1AA' }}>
+                            <div style={{ color: '#FFFFFF', fontWeight: 900, fontSize: '2.5rem' }}>
+                              {(selectedProfileUser.userName || selectedProfileUser.name || 'Member').slice(0, 2).toUpperCase()}
+                            </div>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700 }}>No real profile photos uploaded yet</span>
+                          </div>
+                        )}
+                        {realPhotos.length > 0 && (
+                          <div style={{ position: 'absolute', bottom: '8px', right: '8px', background: 'rgba(9,9,11,0.7)', color: '#FFFFFF', padding: '3px 8px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 800 }}>
+                            Photo {(activePhotoIdx || 0) + 1} of {realPhotos.length}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Thumbnail Row */}
+                      {realPhotos.length > 1 && (
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
+                          {realPhotos.map((ph, idx) => (
+                            <div
+                              key={idx}
+                              onClick={() => setActivePhotoIdx(idx)}
+                              style={{
+                                width: '50px', height: '50px',
+                                borderRadius: '12px',
+                                overflow: 'hidden',
+                                border: activePhotoIdx === idx ? '2.5px solid #FF3B30' : '1px solid #E4E4E7',
+                                cursor: 'pointer',
+                                flexShrink: 0
+                              }}
+                            >
+                              <img src={ph} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
 
                 {/* 2. Identity & Plan Banner */}
                 <div style={{ background: '#F5F3EF', borderRadius: '18px', padding: '14px', marginBottom: '14px' }}>
@@ -2430,7 +2475,7 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                     <div style={{ padding: '10px 12px', background: '#FDF2F8', border: '1px solid #FBCFE8', borderRadius: '12px', color: '#DB2777', fontSize: '0.76rem', fontWeight: 800 }}>
                       ✓ Free Pass for Women (No payment proof required)
                     </div>
-                  ) : selectedProfileUser.screenshotUrl ? (
+                  ) : (selectedProfileUser.screenshotUrl && !selectedProfileUser.screenshotUrl.includes('unsplash.com')) ? (
                     <div>
                       <div 
                         onClick={() => {
