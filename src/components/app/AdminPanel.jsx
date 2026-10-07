@@ -46,6 +46,55 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
     }
   }, [isOpen, userProfile]);
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const loadUsers = React.useCallback(async () => {
+    try {
+      const parsedUsers = await fetchAllCloudUsers();
+      if (Array.isArray(parsedUsers)) {
+        setUsersList(parsedUsers);
+
+        const now = new Date();
+        const expired = parsedUsers.filter(u => u.status === 'expired' || (u.expiresAt && new Date(u.expiresAt) <= now));
+        setExpiredList(expired);
+
+        // Build pending verifications queue exclusively from real users
+        const pending = parsedUsers.map(u => {
+          const isExp = expired.some(e => e.id === u.id);
+          const isApproved = u.status === 'approved' && !isExp;
+          const isRejected = u.status === 'rejected';
+
+          return {
+            id: `pay_${u.id}`,
+            userId: u.id,
+            userName: u.name,
+            userEmail: u.email,
+            userPhone: u.phone || '+91 9876543210',
+            gender: u.gender || 'Man',
+            planName: u.plan || (u.gender === 'Woman' ? 'Free Pass for Women' : '1 Month VIP Pass'),
+            planDays: u.planDays || getPlanDurationDays(u.plan),
+            startsAt: u.startsAt,
+            expiresAt: u.expiresAt,
+            amount: u.gender === 'Woman' ? '₹0 FREE' : (u.payments?.[0]?.amount || '₹799'),
+            type: 'Membership Pass',
+            screenshotUrl: u.paymentProofUrl || u.paymentProof || '/photos/couple1.jpg',
+            timestamp: u.registered || 'Just now',
+            status: isApproved ? 'approved' : (isRejected ? 'rejected' : 'pending')
+          };
+        });
+        setPendingPayments(pending);
+      }
+    } catch (err) {
+      console.error('Error loading db users in AdminPanel:', err);
+    }
+  }, []);
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await loadUsers();
+    setTimeout(() => setIsRefreshing(false), 500);
+  };
+
   // Sync real registered users from cloud & local database whenever panel opens or authenticates
   React.useEffect(() => {
     if (!isOpen) {
@@ -53,55 +102,11 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
       return;
     }
 
-    const loadUsers = async () => {
-      try {
-        const parsedUsers = await fetchAllCloudUsers();
-        if (Array.isArray(parsedUsers)) {
-          setUsersList(parsedUsers);
-
-          const now = new Date();
-          const expired = parsedUsers.filter(u => u.status === 'expired' || (u.expiresAt && new Date(u.expiresAt) <= now));
-          setExpiredList(expired);
-
-          // Build pending verifications queue exclusively from real users
-          const pending = parsedUsers.map(u => {
-            const isExp = expired.some(e => e.id === u.id);
-            const isApproved = u.status === 'approved' && !isExp;
-            const isRejected = u.status === 'rejected';
-
-            return {
-              id: `pay_${u.id}`,
-              userId: u.id,
-              userName: u.name,
-              userEmail: u.email,
-              userPhone: u.phone || '+91 9876543210',
-              gender: u.gender || 'Man',
-              planName: u.plan || (u.gender === 'Woman' ? 'Free Pass for Women' : '1 Month VIP Pass'),
-              planDays: u.planDays || getPlanDurationDays(u.plan),
-              startsAt: u.startsAt,
-              expiresAt: u.expiresAt,
-              amount: u.gender === 'Woman' ? '₹0 FREE' : (u.payments?.[0]?.amount || '₹799'),
-              type: 'Membership Pass',
-              screenshotUrl: u.paymentProofUrl || u.paymentProof || '/photos/couple1.jpg',
-              timestamp: u.registered || 'Just now',
-              status: isApproved ? 'approved' : (isRejected ? 'rejected' : 'pending')
-            };
-          });
-          setPendingPayments(pending);
-        }
-
-        // Auto-backfill registered accounts to Supabase Auth silently
-        backfillAllUsersToSupabase();
-      } catch (err) {
-        console.error('Error loading db users in AdminPanel:', err);
-      }
-    };
-
     loadUsers();
     const pollInterval = setInterval(loadUsers, 3000); // 3s Real-Time Multi-Device Polling Loop
 
     return () => clearInterval(pollInterval);
-  }, [isOpen, isAuthenticated, userProfile]);
+  }, [isOpen, isAuthenticated, userProfile, loadUsers]);
 
   const handleManualSupabaseSync = async () => {
     setIsSyncingSupabase(true);
@@ -131,15 +136,10 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
       setIsAuthenticated(true);
       setLoginError('');
       
-      // Attempt Supabase Admin Auth session & backfill
+      // Clear any invalid session to maintain clean anon access to Supabase
       try {
-        await supabase.auth.signInWithPassword({
-          email: 'cupid.livepro@gmail.com',
-          password: 'cUpid.livepro#@3210'
-        });
+        await supabase.auth.signOut();
       } catch (aErr) {}
-
-      backfillAllUsersToSupabase();
 
       if (onLoginSuccess) {
         onLoginSuccess({ email: 'cupid.livepro@gmail.com', name: 'Admin', isAdmin: true });
@@ -360,6 +360,10 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button onClick={handleManualRefresh} style={{ padding: '8px 12px', background: '#F4F4F5', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 800, color: '#09090B', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+                Refresh
+              </button>
               <button onClick={() => setIsAuthenticated(false)} style={{ padding: '8px 12px', background: '#F4F4F5', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 800, color: '#09090B', border: 'none', cursor: 'pointer' }}>
                 Log out
               </button>

@@ -204,27 +204,34 @@ export async function syncUserToCloud(record) {
 export async function fetchAllCloudUsers() {
   let cloudUsers = [];
 
-  // Source A: Guaranteed Cloud DB Relay
+  // Source A: Supabase `profiles` + `memberships` (Primary Source of Truth)
   try {
-    const res = await fetch(REST_CLOUD_API);
-    if (res.ok) {
-      const list = await res.json();
-      if (Array.isArray(list)) {
-        list.forEach(item => {
-          if (item && item.name && item.name.startsWith('cufy_user_') && item.data && item.data.email) {
-            cloudUsers.push(item.data);
-          }
-        });
-      }
-    }
-  } catch (err) {
-    console.log('Cloud relay fetch note:', err);
-  }
+    let profiles = null;
+    let memberships = null;
 
-  // Source B: Supabase `profiles` + `memberships` (Primary Source of Truth)
-  try {
-    const { data: profiles } = await supabase.from('profiles').select('*');
-    const { data: memberships } = await supabase.from('memberships').select('*');
+    const pRes = await supabase.from('profiles').select('*');
+    if (pRes.data && Array.isArray(pRes.data)) {
+      profiles = pRes.data;
+    } else {
+      console.warn('Profiles query returned error/null:', pRes.error);
+      // Auto-recover if auth session was corrupted by failed sign-in
+      try {
+        await supabase.auth.signOut();
+        const retry = await supabase.from('profiles').select('*');
+        if (retry.data && Array.isArray(retry.data)) profiles = retry.data;
+      } catch (e) {}
+    }
+
+    const mRes = await supabase.from('memberships').select('*');
+    if (mRes.data && Array.isArray(mRes.data)) {
+      memberships = mRes.data;
+    } else {
+      console.warn('Memberships query returned error/null:', mRes.error);
+      try {
+        const retryM = await supabase.from('memberships').select('*');
+        if (retryM.data && Array.isArray(retryM.data)) memberships = retryM.data;
+      } catch (e) {}
+    }
 
     if (profiles && Array.isArray(profiles) && profiles.length > 0) {
       profiles.forEach(p => {
