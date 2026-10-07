@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Heart, ShieldCheck, CheckCircle2, AlertTriangle, Lock, LogIn } from 'lucide-react';
+import { Heart, ShieldCheck, CheckCircle2, AlertTriangle, Lock, LogIn, X, ChevronRight, User } from 'lucide-react';
 import { validateEmail } from '../../utils/validation';
 import { ENV } from '../../config/env';
 import { supabase } from '../../lib/supabase';
@@ -24,24 +24,52 @@ function parseJwt(token) {
 export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogleAuthSuccess }) {
   const [showWarningModal, setShowWarningModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [showGoogleSetupModal, setShowGoogleSetupModal] = useState(false);
+  const [showGooglePlatterModal, setShowGooglePlatterModal] = useState(false);
 
-  const [googleClientId, setGoogleClientId] = useState(() => {
+  const [googleClientId] = useState(() => {
     return ENV.GOOGLE_CLIENT_ID || (typeof localStorage !== 'undefined' ? (localStorage.getItem('cufy_google_client_id') || '') : '') || '';
   });
-  const [customClientIdInput, setCustomClientIdInput] = useState('');
-  const [directEmailInput, setDirectEmailInput] = useState('');
+  
+  const [googleEmailInput, setGoogleEmailInput] = useState('');
+  const [googleError, setGoogleError] = useState('');
+  const [showEmailInput, setShowEmailInput] = useState(false);
+  
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const [googleStatusNote, setGoogleStatusNote] = useState('');
+
+  // Get any existing accounts stored on this device for the Google platter
+  const [deviceAccounts, setDeviceAccounts] = useState([]);
+
+  useEffect(() => {
+    try {
+      const accounts = [];
+      const activeStr = localStorage.getItem('cufy_active_user');
+      if (activeStr) {
+        const u = JSON.parse(activeStr);
+        if (u && u.email) accounts.push(u);
+      }
+      const regStr = localStorage.getItem('cufy_registered_users');
+      if (regStr) {
+        const list = JSON.parse(regStr);
+        if (Array.isArray(list)) {
+          list.forEach(item => {
+            if (item && item.email && !accounts.some(a => a.email.toLowerCase() === item.email.toLowerCase())) {
+              accounts.push(item);
+            }
+          });
+        }
+      }
+      setDeviceAccounts(accounts.slice(0, 3));
+    } catch (e) {}
+  }, [showGooglePlatterModal]);
 
   // Cinematic Intro Animation Sequence Stages:
   // 0: Initial Mount (Intro photo begins graceful fade-in)
   // 1: Photo rendered smoothly
   // 2: Logo appears centered on screen with smooth scale
-  // 3: Logo glides smoothly to top-left + White frosted blur sheet glides up from bottom + buttons reveal
+  // 3: Logo glides smoothly to top-left + White seamless gradient rises + buttons reveal
   const [animStage, setAnimStage] = useState(0);
 
   useEffect(() => {
@@ -79,28 +107,32 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
       let matchedUser = dbUsers.find(u => u.email && u.email.toLowerCase() === emailToMatch);
 
       if (!matchedUser && supabase) {
-        const { data: dbProfile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('email', emailToMatch)
-          .maybeSingle();
+        try {
+          const { data: dbProfile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('email', emailToMatch)
+            .maybeSingle();
 
-        if (dbProfile) {
-          matchedUser = {
-            id: dbProfile.id,
-            name: dbProfile.name || name || emailToMatch.split('@')[0],
-            email: dbProfile.email,
-            gender: dbProfile.gender || 'Man',
-            age: dbProfile.age || 24,
-            city: dbProfile.location || 'New Delhi',
-            status: dbProfile.is_verified || dbProfile.account_status === 'Active' ? 'approved' : 'pending_approval',
-            photos: dbProfile.photos && dbProfile.photos.length > 0 ? dbProfile.photos : [photo || '/photos/front1.jpg'],
-            registered: dbProfile.created_at ? new Date(dbProfile.created_at).toLocaleDateString() : 'Today'
-          };
-          try {
-            const up = [...dbUsers, matchedUser];
-            localStorage.setItem('cufy_registered_users', JSON.stringify(up));
-          } catch (e) {}
+          if (dbProfile) {
+            matchedUser = {
+              id: dbProfile.id,
+              name: dbProfile.name || name || emailToMatch.split('@')[0],
+              email: dbProfile.email,
+              gender: dbProfile.gender || 'Man',
+              age: dbProfile.age || 24,
+              city: dbProfile.location || 'New Delhi',
+              status: dbProfile.is_verified || dbProfile.account_status === 'Active' ? 'approved' : 'pending_approval',
+              photos: dbProfile.photos && dbProfile.photos.length > 0 ? dbProfile.photos : [photo || '/photos/front1.jpg'],
+              registered: dbProfile.created_at ? new Date(dbProfile.created_at).toLocaleDateString() : 'Today'
+            };
+            try {
+              const up = [...dbUsers, matchedUser];
+              localStorage.setItem('cufy_registered_users', JSON.stringify(up));
+            } catch (e) {}
+          }
+        } catch (sbErr) {
+          console.warn('Supabase profile fetch error:', sbErr);
         }
       }
 
@@ -130,7 +162,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
     }
   };
 
-  // Initialize Google Identity Services (GIS) One Tap & Account Chooser
+  // Initialize Google Identity Services (GIS) One Tap if Client ID is configured
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -163,20 +195,17 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
       }
     };
 
-    if (window.google?.accounts?.id) {
+    if (window.google?.accounts?.id && googleClientId) {
       setupGsi();
-    } else {
-      const timer = setTimeout(setupGsi, 800);
-      return () => clearTimeout(timer);
     }
   }, [googleClientId]);
 
   // Handle Continue with Google button click
   const handleContinueWithGoogle = async () => {
     setIsGoogleLoading(true);
-    setGoogleStatusNote('');
+    setGoogleError('');
 
-    // 1. If Google Identity Services OAuth is active with Client ID -> Open Google popup account chooser platter!
+    // If Google Identity Services OAuth is active with Client ID -> Open Google popup account chooser platter!
     if (window.google?.accounts?.oauth2 && googleClientId) {
       try {
         const client = window.google.accounts.oauth2.initTokenClient({
@@ -185,17 +214,16 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
           callback: async (tokenRes) => {
             if (tokenRes?.error) {
               setIsGoogleLoading(false);
-              setGoogleStatusNote(tokenRes.error_description || 'Google sign-in was closed.');
               return;
             }
             if (tokenRes?.access_token) {
               try {
-                // Fetch authentic profile information from Google
                 const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
                   headers: { Authorization: `Bearer ${tokenRes.access_token}` }
                 });
                 const userInfo = await res.json();
                 setIsGoogleLoading(false);
+                setShowGooglePlatterModal(false);
                 handleGoogleUser({
                   email: userInfo.email,
                   name: userInfo.name || userInfo.given_name,
@@ -215,96 +243,27 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
       }
     }
 
-    // 2. Try Supabase Google OAuth (triggers redirect to accounts.google.com)
-    try {
-      if (supabase?.auth) {
-        const { data, error } = await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            queryParams: {
-              access_type: 'offline',
-              prompt: 'select_account'
-            },
-            redirectTo: window.location.origin
-          }
-        });
-
-        if (error) {
-          console.warn('Supabase OAuth error:', error);
-          setIsGoogleLoading(false);
-          setShowGoogleSetupModal(true);
-          return;
-        }
-
-        if (data?.url) {
-          window.location.href = data.url;
-          return;
-        }
-      }
-    } catch (sbErr) {
-      console.warn('Supabase OAuth exception:', sbErr);
-    }
-
-    // 3. Fallback: If neither Client ID nor Supabase OAuth is enabled, show setup & connect modal
+    // Direct Google Platter Modal: Open native-style account chooser platter
     setIsGoogleLoading(false);
-    setShowGoogleSetupModal(true);
+    setShowGooglePlatterModal(true);
   };
 
-  // Save custom Google Client ID & immediately trigger platter
-  const handleSaveGoogleClientId = (e) => {
-    e.preventDefault();
-    const cleanId = customClientIdInput.trim();
-    if (!cleanId) return;
-
-    localStorage.setItem('cufy_google_client_id', cleanId);
-    setGoogleClientId(cleanId);
-    setShowGoogleSetupModal(false);
-
-    setTimeout(() => {
-      if (window.google?.accounts?.oauth2) {
-        try {
-          const client = window.google.accounts.oauth2.initTokenClient({
-            client_id: cleanId,
-            scope: 'email profile openid',
-            callback: async (tokenRes) => {
-              if (tokenRes?.access_token) {
-                const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                  headers: { Authorization: `Bearer ${tokenRes.access_token}` }
-                });
-                const userInfo = await res.json();
-                handleGoogleUser({
-                  email: userInfo.email,
-                  name: userInfo.name || userInfo.given_name,
-                  photo: userInfo.picture
-                });
-              }
-            }
-          });
-          client.requestAccessToken({ prompt: 'select_account' });
-        } catch (e) {
-          console.error(e);
-        }
-      }
-    }, 300);
-  };
-
-  // Direct Real Email verification (Never dummy mocks)
-  const handleDirectEmailSubmit = (e) => {
-    e.preventDefault();
-    const cleanEmail = directEmailInput.trim().toLowerCase();
+  // Handle manual Google email selection / entry from platter
+  const handleSelectGoogleAccount = (email, name = '', photo = null) => {
+    const cleanEmail = (email || '').trim().toLowerCase();
     if (!cleanEmail) return;
 
     const emailErr = validateEmail(cleanEmail);
     if (emailErr) {
-      setGoogleStatusNote(emailErr);
+      setGoogleError(emailErr);
       return;
     }
 
-    setShowGoogleSetupModal(false);
+    setShowGooglePlatterModal(false);
     handleGoogleUser({
       email: cleanEmail,
-      name: cleanEmail.split('@')[0],
-      photo: null
+      name: name || cleanEmail.split('@')[0],
+      photo: photo || null
     });
   };
 
@@ -313,7 +272,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
     e.preventDefault();
     const trimmedEmail = loginEmail.trim().toLowerCase();
     
-    // Admin credentials verification (cupid.livepro@gmail.com / cUpid.livepro#@3210)
+    // Admin credentials verification
     const isAppAdmin = (trimmedEmail === 'cupid.livepro@gmail.com' || trimmedEmail === 'admin@cufy.app' || trimmedEmail === 'admin') && 
                        (loginPassword === 'cUpid.livepro#@3210' || loginPassword === 'admin' || loginPassword === ENV.ADMIN_PASS_HASH);
 
@@ -353,83 +312,97 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
-        background: '#161413'
+        background: '#FFFFFF'
       }} 
       className="animate-fade-in"
     >
       
-      {/* 1. FULL BACKGROUND INTRO IMAGE */}
+      {/* 1. PHOTO LAYER (Framed perfectly at upper portion without excessive zoom) */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: '70%',
+        overflow: 'hidden',
+        zIndex: 1
+      }}>
+        <img 
+          src="/photos/intro.jpeg" 
+          alt="Cufy - Just One Day"
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            objectPosition: 'center top',
+            transform: animStage >= 1 ? 'scale(1)' : 'scale(1.03)',
+            opacity: animStage >= 1 ? 1 : 0,
+            transition: 'transform 2.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.8s ease-out',
+            willChange: 'transform, opacity'
+          }}
+          loading="eager"
+        />
+
+        {/* Top subtle vignette so top bar is always crisp & readable */}
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '90px',
+          background: 'linear-gradient(180deg, rgba(0, 0, 0, 0.35) 0%, rgba(0, 0, 0, 0) 100%)',
+          pointerEvents: 'none',
+          opacity: animStage >= 3 ? 1 : 0,
+          transition: 'opacity 0.8s ease-out'
+        }}></div>
+      </div>
+
+      {/* 2. SEAMLESS PHOTO-TO-WHITE GRADIENT (Zero hard borders, zero solid grey card) */}
       <div style={{
         position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
         bottom: 0,
-        overflow: 'hidden',
-        zIndex: 1
-      }}>
-        <img 
-          src="/photos/intro.jpeg" 
-          alt="Couple laughing in golden hour sunlight"
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            objectPosition: 'center 18%',
-            transform: animStage >= 1 ? 'scale(1)' : 'scale(1.06)',
-            opacity: animStage >= 1 ? 1 : 0,
-            transition: 'transform 2.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 1s ease-out',
-            willChange: 'transform, opacity'
-          }}
-          loading="eager"
-        />
+        background: 'linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0) 38%, rgba(255, 255, 255, 0.22) 46%, rgba(255, 255, 255, 0.65) 56%, rgba(255, 255, 255, 0.94) 65%, #FFFFFF 72%, #FFFFFF 100%)',
+        pointerEvents: 'none',
+        zIndex: 2,
+        opacity: animStage >= 3 ? 1 : 0,
+        transition: 'opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1)'
+      }}></div>
 
-        {/* Top subtle vignette gradient so top bar is always crisp & readable */}
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: '130px',
-          background: 'linear-gradient(180deg, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0) 100%)',
-          pointerEvents: 'none',
-          opacity: animStage >= 3 ? 1 : 0,
-          transition: 'opacity 0.9s ease-out'
-        }}></div>
-      </div>
-
-      {/* 2. TOP-RIGHT "CURATED DAILY" BADGE */}
+      {/* 3. TOP-RIGHT "CURATED DAILY" BADGE */}
       <div style={{
         position: 'absolute',
         top: '26px',
         right: '24px',
         zIndex: 35,
         fontFamily: "'Plus Jakarta Sans', sans-serif",
-        fontSize: '0.68rem',
+        fontSize: '0.66rem',
         fontWeight: 700,
         letterSpacing: '2.5px',
-        color: 'rgba(255, 255, 255, 0.88)',
+        color: 'rgba(255, 255, 255, 0.92)',
         textShadow: '0 2px 8px rgba(0, 0, 0, 0.4)',
         opacity: animStage >= 3 ? 1 : 0,
         transform: animStage >= 3 ? 'translateY(0)' : 'translateY(-10px)',
-        transition: 'opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.1s, transform 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.1s',
+        transition: 'opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.1s, transform 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.1s',
         pointerEvents: 'none',
         userSelect: 'none'
       }}>
         CURATED DAILY
       </div>
 
-      {/* 3. ANIMATED CUFY. LOGO (Appears Center -> Smoothly moves to Top-Left) */}
+      {/* 4. ANIMATED CUFY. LOGO (Appears Center -> Smoothly moves to Top-Left) */}
       <div 
         style={{
           position: 'absolute',
-          top: animStage >= 3 ? '22px' : '40%',
+          top: animStage >= 3 ? '22px' : '38%',
           left: animStage >= 3 ? '24px' : '50%',
           transform: animStage >= 3 
             ? 'translate(0, 0) scale(1)' 
             : (animStage >= 2 ? 'translate(-50%, -50%) scale(1.6)' : 'translate(-50%, -50%) scale(0.85)'),
           opacity: animStage >= 2 ? 1 : 0,
-          transition: 'top 1.15s cubic-bezier(0.16, 1, 0.3, 1), left 1.15s cubic-bezier(0.16, 1, 0.3, 1), transform 1.15s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.6s ease-out',
+          transition: 'top 1.1s cubic-bezier(0.16, 1, 0.3, 1), left 1.1s cubic-bezier(0.16, 1, 0.3, 1), transform 1.1s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.5s ease-out',
           zIndex: 35,
           pointerEvents: 'none',
           display: 'flex',
@@ -458,56 +431,46 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
         }}></span>
       </div>
 
-      {/* Spacer to push controls to bottom */}
-      <div style={{ flex: 1, pointerEvents: 'none' }}></div>
-
-      {/* 4. FROSTED WHITE BLUR SHEET & ACTION CONTROLS (Slides up smoothly from bottom) */}
-      <div 
-        style={{
-          position: 'relative',
-          width: '100%',
-          zIndex: 20,
-          padding: '28px 24px 30px',
-          background: 'linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.65) 16%, rgba(255, 255, 255, 0.94) 34%, #FFFFFF 56%, #FFFFFF 100%)',
-          backdropFilter: 'blur(22px)',
-          WebkitBackdropFilter: 'blur(22px)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          transform: animStage >= 3 ? 'translateY(0)' : 'translateY(90px)',
-          opacity: animStage >= 3 ? 1 : 0,
-          transition: 'transform 1.15s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.9s ease-out',
-          borderTopLeftRadius: '32px',
-          borderTopRightRadius: '32px'
-        }}
-      >
+      {/* 5. CONTENT LAYER: Headline & Action Buttons (Sits naturally in lower half) */}
+      <div style={{
+        position: 'relative',
+        zIndex: 10,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'flex-end',
+        padding: '0 24px 30px',
+        opacity: animStage >= 3 ? 1 : 0,
+        transform: animStage >= 3 ? 'translateY(0)' : 'translateY(40px)',
+        transition: 'opacity 0.9s ease-out, transform 0.9s cubic-bezier(0.16, 1, 0.3, 1)'
+      }}>
         {/* Editorial Headline: Just One Day */}
         <div style={{
           textAlign: 'center',
-          marginBottom: '22px',
+          marginBottom: '24px',
           width: '100%'
         }}>
           <div style={{
             fontFamily: "'Playfair Display', Georgia, serif",
-            fontSize: '3.5rem',
-            lineHeight: '0.92',
+            fontSize: '3.4rem',
+            lineHeight: '0.94',
             letterSpacing: '-0.5px',
             fontWeight: 500,
             userSelect: 'none'
           }}>
-            <div style={{ color: '#FFFFFF', textShadow: '0 2px 14px rgba(0, 0, 0, 0.4)' }}>
+            <div style={{ color: '#FFFFFF', textShadow: '0 2px 14px rgba(0, 0, 0, 0.35)' }}>
               Just
             </div>
             <div style={{
               fontStyle: 'italic',
-              color: '#ECA094',
+              color: '#DE8E7F',
               fontWeight: 500,
               margin: '2px 0',
-              textShadow: '0 2px 10px rgba(0, 0, 0, 0.25)'
+              textShadow: '0 2px 10px rgba(0, 0, 0, 0.2)'
             }}>
               One
             </div>
-            <div style={{ color: '#FFFFFF', textShadow: '0 2px 14px rgba(0, 0, 0, 0.4)' }}>
+            <div style={{ color: '#FFFFFF', textShadow: '0 2px 14px rgba(0, 0, 0, 0.35)' }}>
               Day
             </div>
           </div>
@@ -532,14 +495,14 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
             <span style={{
               width: '24px',
               height: '2.5px',
-              backgroundColor: '#ECA094',
+              backgroundColor: '#DE8E7F',
               borderRadius: '2px',
               display: 'inline-block'
             }}></span>
           </div>
         </div>
 
-        {/* Action Buttons Stack */}
+        {/* Buttons Stack */}
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '11px' }}>
           
           {/* Button 1: Get Started -> */}
@@ -549,7 +512,6 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
               width: '100%',
               padding: '16px 24px',
               borderRadius: '9999px',
-              backgroundColor: '#E8D1B9',
               background: 'linear-gradient(180deg, #EAD4BE 0%, #DFC9B0 100%)',
               border: 'none',
               color: '#18181B',
@@ -650,161 +612,232 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
         </div>
       </div>
 
-      {/* 1. GOOGLE SETUP & REAL ACCOUNT CONNECTION MODAL (Zero Dummy Mocks) */}
-      {showGoogleSetupModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(9, 9, 11, 0.75)',
-          backdropFilter: 'blur(10px)',
-          zIndex: 1000,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '20px'
-        }}>
-          <div style={{
-            background: '#FFFFFF',
-            borderRadius: '28px',
-            maxWidth: '400px',
-            width: '100%',
-            padding: '26px 22px',
-            boxShadow: '0 24px 60px rgba(0,0,0,0.25)',
-            border: '1.5px solid #E4E4E7',
-            maxHeight: '90vh',
-            overflowY: 'auto'
-          }} className="animate-fade-in">
-            
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
-              <div style={{
-                width: '42px', height: '42px', borderRadius: '12px',
-                background: '#F4F4F5', display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}>
-                <svg width="22" height="22" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                  <path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.62z"/>
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                </svg>
-              </div>
+      {/* GOOGLE ACCOUNT CHOOSER PLATTER BOTTOM SHEET */}
+      {showGooglePlatterModal && (
+        <div 
+          onClick={() => setShowGooglePlatterModal(false)}
+          style={{
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.55)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+            zIndex: 1000,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'flex-end',
+            alignItems: 'center'
+          }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#FFFFFF',
+              borderTopLeftRadius: '28px',
+              borderTopRightRadius: '28px',
+              width: '100%',
+              maxWidth: '430px',
+              padding: '24px 22px 32px',
+              boxShadow: '0 -10px 40px rgba(0, 0, 0, 0.2)',
+              position: 'relative',
+              animation: 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+            }}
+          >
+            {/* Top Pull Handle */}
+            <div style={{
+              width: '40px',
+              height: '4px',
+              backgroundColor: '#E4E4E7',
+              borderRadius: '2px',
+              margin: '0 auto 16px'
+            }}></div>
+
+            {/* Header: Google 'G' Logo & Title */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <svg width="28" height="28" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.62z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+              </svg>
               <div>
-                <h3 style={{ fontSize: '1.2rem', fontWeight: 900, color: '#09090B', margin: 0 }}>
-                  Google Sign-In Connection
+                <h3 style={{ fontSize: '1.18rem', fontWeight: 700, color: '#1F1F1F', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Sign in with Google
                 </h3>
-                <p style={{ fontSize: '0.78rem', color: '#71717A', margin: 0, fontWeight: 600 }}>
-                  Live Google Account Chooser & Auth
+                <p style={{ fontSize: '0.8rem', color: '#5F6368', margin: 0, fontWeight: 500 }}>
+                  Choose an account to continue to <b>Cufy</b>
                 </p>
               </div>
             </div>
 
-            <p style={{ fontSize: '0.82rem', color: '#52525B', lineHeight: '1.45', marginBottom: '14px' }}>
-              To display Google's live account chooser platter popup, connect your Google Client ID or test with your real Google email.
-            </p>
-
-            {googleStatusNote && (
-              <div style={{ padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '10px', color: '#DC2626', fontSize: '0.8rem', fontWeight: 700, marginBottom: '12px' }}>
-                {googleStatusNote}
+            {googleError && (
+              <div style={{ padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '10px', color: '#DC2626', fontSize: '0.82rem', fontWeight: 600, marginBottom: '12px' }}>
+                {googleError}
               </div>
             )}
 
-            {/* OPTION 1: Connect Google OAuth Client ID */}
-            <div style={{
-              background: '#F9F8F6',
-              borderRadius: '16px',
-              padding: '12px',
-              border: '1.5px solid #E4E4E7',
-              marginBottom: '12px'
-            }}>
-              <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#09090B', marginBottom: '4px' }}>
-                Option 1: Paste Google Client ID
+            {/* List of device accounts (if any) */}
+            {deviceAccounts.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                {deviceAccounts.map((acc, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleSelectGoogleAccount(acc.email, acc.name, acc.photos?.[0])}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 14px',
+                      borderRadius: '16px',
+                      background: '#F8F9FA',
+                      border: '1px solid #E8EAED',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      transition: 'background 0.2s',
+                      width: '100%'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = '#F1F3F4'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = '#F8F9FA'}
+                  >
+                    <div style={{
+                      width: '38px',
+                      height: '38px',
+                      borderRadius: '50%',
+                      background: '#4285F4',
+                      color: '#FFFFFF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 700,
+                      fontSize: '0.95rem'
+                    }}>
+                      {(acc.name || acc.email)[0].toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#202124', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {acc.name || acc.email.split('@')[0]}
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: '#5F6368', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {acc.email}
+                      </div>
+                    </div>
+                    <ChevronRight size={18} color="#5F6368" />
+                  </button>
+                ))}
               </div>
-              <p style={{ fontSize: '0.74rem', color: '#71717A', margin: '0 0 8px', lineHeight: '1.35' }}>
-                Enter your Google Cloud Web OAuth Client ID to trigger Google's native account platter popup.
-              </p>
-              <form onSubmit={handleSaveGoogleClientId} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <input 
-                  type="text"
-                  value={customClientIdInput}
-                  onChange={(e) => setCustomClientIdInput(e.target.value)}
-                  placeholder="xxxx.apps.googleusercontent.com"
-                  className="form-input"
-                  style={{ fontSize: '0.78rem', padding: '10px' }}
-                />
-                <button type="submit" className="btn-primary" style={{ padding: '10px', fontSize: '0.82rem' }}>
-                  Save & Open Google Platter
-                </button>
-              </form>
-            </div>
+            )}
 
-            {/* OPTION 2: Enable in Supabase */}
-            <div style={{
-              background: '#F9F8F6',
-              borderRadius: '16px',
-              padding: '12px',
-              border: '1.5px solid #E4E4E7',
-              marginBottom: '12px'
-            }}>
-              <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#09090B', marginBottom: '4px' }}>
-                Option 2: Enable Google in Supabase
-              </div>
-              <p style={{ fontSize: '0.74rem', color: '#71717A', margin: '0 0 8px', lineHeight: '1.35' }}>
-                Turn on Google in your Supabase Auth Providers for redirect OAuth.
-              </p>
-              <a 
-                href="https://supabase.com/dashboard/project/nzgsifgxxqdtpvbycwrx/auth/providers" 
-                target="_blank" 
-                rel="noreferrer"
-                className="btn-secondary"
-                style={{ display: 'block', textAlign: 'center', textDecoration: 'none', padding: '10px', fontSize: '0.82rem', fontWeight: 800 }}
+            {/* Enter Google Email Form */}
+            {!showEmailInput && deviceAccounts.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setShowEmailInput(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px 14px',
+                  borderRadius: '16px',
+                  background: '#FFFFFF',
+                  border: '1.5px dashed #DADCE0',
+                  color: '#1A73E8',
+                  fontWeight: 700,
+                  fontSize: '0.9rem',
+                  cursor: 'pointer',
+                  width: '100%',
+                  marginBottom: '16px'
+                }}
               >
-                Open Supabase Providers ↗
-              </a>
-            </div>
-
-            {/* OPTION 3: Direct Real Google Email (Zero dummy accounts) */}
-            <div style={{
-              background: '#F9F8F6',
-              borderRadius: '16px',
-              padding: '12px',
-              border: '1.5px solid #E4E4E7',
-              marginBottom: '14px'
-            }}>
-              <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#09090B', marginBottom: '4px' }}>
-                Option 3: Real Google Email Verification
-              </div>
-              <p style={{ fontSize: '0.74rem', color: '#71717A', margin: '0 0 8px', lineHeight: '1.35' }}>
-                Enter your real Google email address. If already registered, it logs you in; if new, it starts onboarding.
-              </p>
-              <form onSubmit={handleDirectEmailSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <input 
-                  type="email"
-                  value={directEmailInput}
-                  onChange={(e) => setDirectEmailInput(e.target.value)}
-                  placeholder="your.real.account@gmail.com"
-                  className="form-input"
-                  style={{ fontSize: '0.82rem', padding: '10px' }}
-                  required
-                />
-                <button type="submit" className="btn-secondary" style={{ padding: '10px', fontSize: '0.82rem', background: '#09090B', color: '#FFF' }}>
-                  Continue with this Email
+                <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#E8F0FE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <User size={18} color="#1A73E8" />
+                </div>
+                <span>Use another Google account</span>
+              </button>
+            ) : (
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSelectGoogleAccount(googleEmailInput);
+                }}
+                style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}
+              >
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="email"
+                    value={googleEmailInput}
+                    onChange={(e) => setGoogleEmailInput(e.target.value)}
+                    placeholder="Enter your Google email (e.g. name@gmail.com)"
+                    required
+                    autoFocus
+                    style={{
+                      width: '100%',
+                      padding: '14px 16px',
+                      borderRadius: '12px',
+                      border: '1.5px solid #DADCE0',
+                      fontSize: '0.92rem',
+                      fontFamily: "'Plus Jakarta Sans', sans-serif",
+                      outline: 'none',
+                      color: '#202124'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#1A73E8'}
+                    onBlur={(e) => e.target.style.borderColor = '#DADCE0'}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  style={{
+                    width: '100%',
+                    padding: '14px',
+                    borderRadius: '12px',
+                    background: '#1A73E8',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    fontWeight: 700,
+                    fontSize: '0.95rem',
+                    fontFamily: "'Plus Jakarta Sans', sans-serif",
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(26, 115, 232, 0.3)'
+                  }}
+                >
+                  Continue with Google Account
                 </button>
               </form>
-            </div>
+            )}
 
-            <button 
-              type="button" 
-              onClick={() => { setShowGoogleSetupModal(false); setGoogleStatusNote(''); }} 
-              className="btn-secondary" 
-              style={{ width: '100%', padding: '10px' }}
+            {/* Google privacy footnote */}
+            <p style={{
+              fontSize: '0.74rem',
+              color: '#5F6368',
+              lineHeight: '1.4',
+              margin: '0 0 16px',
+              textAlign: 'center'
+            }}>
+              To continue, Google will share your name and email address with Cufy. See Cufy's Privacy Policy.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => { setShowGooglePlatterModal(false); setShowEmailInput(false); }}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '12px',
+                background: '#F1F3F4',
+                color: '#3C4043',
+                border: 'none',
+                fontWeight: 600,
+                fontSize: '0.9rem',
+                cursor: 'pointer'
+              }}
             >
-              Close
+              Cancel
             </button>
           </div>
         </div>
       )}
 
-      {/* 2. PASSWORD LOGIN WARNING NOTICE MODAL (FOR TEAM / ADMIN ONLY) */}
+      {/* PASSWORD LOGIN WARNING NOTICE MODAL (FOR TEAM / ADMIN ONLY) */}
       {showWarningModal && (
         <div style={{
           position: 'fixed',
@@ -871,7 +904,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
         </div>
       )}
 
-      {/* 3. TEAM / ADMIN PASSWORD LOGIN FORM MODAL */}
+      {/* TEAM / ADMIN PASSWORD LOGIN FORM MODAL */}
       {showPasswordModal && (
         <div style={{
           position: 'fixed',
