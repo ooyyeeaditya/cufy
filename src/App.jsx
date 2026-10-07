@@ -23,6 +23,7 @@ import AdminPanel from './components/app/AdminPanel';
 import { INITIAL_DAILY_MATCH } from './data/mockProfiles';
 import { analytics } from './utils/analytics';
 import { syncUserToCloud } from './lib/cloudSync';
+import { supabase } from './lib/supabase';
 import { Clock, ShieldCheck, Sparkles, RefreshCw, X, LogOut } from 'lucide-react';
 
 import './styles/index.css';
@@ -123,9 +124,28 @@ export default function App() {
     }
   };
 
-  // Restore persistent login session from localStorage on app launch & listen for approval events
+  // Restore persistent login session from localStorage on app launch & listen for approval events and Supabase OAuth
   useEffect(() => {
     refreshUserSession();
+
+    // Check active Supabase OAuth session (Google OAuth redirect return)
+    if (supabase && supabase.auth) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user && !localStorage.getItem('cufy_active_user')) {
+          handleGoogleAuthUser(session.user);
+        }
+      }).catch(e => console.warn('Supabase getSession error:', e));
+
+      const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+        if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user && !localStorage.getItem('cufy_active_user')) {
+          handleGoogleAuthUser(session.user);
+        }
+      });
+
+      return () => {
+        authListener?.subscription?.unsubscribe();
+      };
+    }
 
     const handleApprovedEvent = () => {
       refreshUserSession();
@@ -183,6 +203,76 @@ export default function App() {
       if (user.status === 'approved') {
         setShowWelcomeModal(true);
       }
+    }
+  };
+
+  // Process authenticated Google user (from Google Identity Services or Supabase OAuth)
+  const handleGoogleAuthUser = async (googleData) => {
+    if (!googleData) return;
+    const email = (googleData.email || '').toLowerCase().trim();
+    if (!email) return;
+
+    const name = googleData.name || googleData.user_metadata?.full_name || googleData.user_metadata?.name || email.split('@')[0];
+    const photo = googleData.photo || googleData.picture || googleData.user_metadata?.avatar_url || googleData.user_metadata?.picture || null;
+
+    // 1. Admin login verification
+    if (email === 'cupid.livepro@gmail.com' || email === 'admin@cufy.app') {
+      handleLoginSuccess({ email: 'cupid.livepro@gmail.com', name: 'Admin', isAdmin: true });
+      return;
+    }
+
+    // 2. Check local database for existing registered user
+    let matchedUser = null;
+    try {
+      const dbStr = localStorage.getItem('cufy_registered_users');
+      const dbUsers = dbStr ? JSON.parse(dbStr) : [];
+      matchedUser = dbUsers.find(u => u.email && u.email.toLowerCase() === email);
+    } catch (e) {}
+
+    // 3. Check Supabase profiles table if not matched in localStorage
+    if (!matchedUser && supabase) {
+      try {
+        const { data: dbProfile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('email', email)
+          .maybeSingle();
+
+        if (dbProfile) {
+          matchedUser = {
+            id: dbProfile.id,
+            name: dbProfile.name || name,
+            email: dbProfile.email,
+            gender: dbProfile.gender || 'Man',
+            age: dbProfile.age || 24,
+            city: dbProfile.location || 'New Delhi',
+            status: dbProfile.is_verified || dbProfile.account_status === 'Active' ? 'approved' : 'pending_approval',
+            plan: dbProfile.gender === 'Woman' ? 'Free Pass for Women' : '1 Month VIP Pass',
+            photos: dbProfile.photos && dbProfile.photos.length > 0 ? dbProfile.photos : [photo || '/photos/front1.jpg'],
+            registered: dbProfile.created_at ? new Date(dbProfile.created_at).toLocaleDateString() : 'Today'
+          };
+          try {
+            const dbStr = localStorage.getItem('cufy_registered_users');
+            let dbUsers = dbStr ? JSON.parse(dbStr) : [];
+            dbUsers.unshift(matchedUser);
+            localStorage.setItem('cufy_registered_users', JSON.stringify(dbUsers));
+          } catch (e) {}
+        }
+      } catch (e) {}
+    }
+
+    // 4. Decision: If user exists in DB -> Direct Login! If new -> Start Onboarding with real info prefilled!
+    if (matchedUser) {
+      handleLoginSuccess(matchedUser);
+    } else {
+      handleStartOnboarding({
+        authType: 'google',
+        email,
+        name,
+        photo,
+        photos: photo ? [photo, null, null, null, null, null] : [null, null, null, null, null, null],
+        authProvider: 'google'
+      });
     }
   };
 
@@ -263,6 +353,7 @@ export default function App() {
             <WelcomeHero 
               onStartOnboarding={handleStartOnboarding}
               onLoginSuccess={handleLoginSuccess}
+              onGoogleAuthSuccess={handleGoogleAuthUser}
             />
           )}
 

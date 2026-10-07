@@ -8,7 +8,7 @@ export const ENV = {
   API_BASE_URL: import.meta.env.VITE_API_BASE_URL || 'https://api.cufy.app/v1',
   ADMIN_EMAIL: import.meta.env.VITE_ADMIN_EMAIL || 'cupid.livepro@gmail.com',
   ADMIN_PASS_HASH: import.meta.env.VITE_ADMIN_PASS_HASH || 'cUpid.livepro#@3210',
-  IS_HTTPS: typeof window !== 'undefined' && window.location.protocol === 'https:',
+  GOOGLE_CLIENT_ID: import.meta.env.VITE_GOOGLE_CLIENT_ID || (typeof localStorage !== 'undefined' ? (localStorage.getItem('cufy_google_client_id') || '') : '') || '',
   ANALYTICS_ENABLED: true,
 };
 
