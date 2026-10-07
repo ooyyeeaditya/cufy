@@ -176,7 +176,19 @@ export async function syncUserToCloud(record) {
         location: syncPayload.city,
         account_status: syncPayload.status === 'suspended' ? 'Suspended' : 'Active',
         is_verified: syncPayload.status === 'approved',
-        photos: syncPayload.photos
+        photos: syncPayload.photos,
+        bio: record.bio || '',
+        prompt1: record.prompt1 || '',
+        prompt1_answer: record.prompt1Answer || record.prompt1_answer || '',
+        prompt2: record.prompt2 || '',
+        prompt2_answer: record.prompt2Answer || record.prompt2_answer || '',
+        height_feet: record.heightFeet || 5,
+        height_inches: record.heightInches || 8,
+        ethnicity: record.ethnicity || ['South Asian'],
+        intent: record.intent || 'Serious relationship',
+        religion: record.religion || 'Spiritual',
+        drinking: record.drinking || 'Socially',
+        smoking: record.smoking || 'Never'
       }, { onConflict: 'email' });
 
     // Memberships Table
@@ -308,6 +320,17 @@ export async function fetchAllCloudUsers() {
           prompt1_answer: p.prompt1_answer || existing?.prompt1_answer || '',
           prompt2: p.prompt2 || existing?.prompt2 || '',
           prompt2_answer: p.prompt2_answer || existing?.prompt2_answer || '',
+          heightFeet: p.height_feet || existing?.heightFeet || 5,
+          heightInches: p.height_inches || existing?.heightInches || 8,
+          ethnicity: p.ethnicity || existing?.ethnicity || ['South Asian'],
+          intent: p.intent || existing?.intent || 'Serious relationship',
+          religion: p.religion || existing?.religion || 'Spiritual',
+          drinking: p.drinking || existing?.drinking || 'Socially',
+          smoking: p.smoking || existing?.smoking || 'Never',
+          pronouns: p.pronouns || existing?.pronouns || '',
+          college: p.college || existing?.college || '',
+          jobTitle: p.job_title || existing?.jobTitle || '',
+          hometown: p.hometown || existing?.hometown || '',
           rejectionReason: rejectionReason,
           email: p.email,
           phone: p.phone || existing?.phone || '+91 9876543210',
@@ -687,4 +710,53 @@ export async function backfillAllUsersToSupabase() {
   }
 
   return successCount;
+}
+
+// Permanently delete user from Supabase and LocalStorage
+export async function deleteCloudUser(userId, userEmail) {
+  const cleanEmail = sanitizeEmail(userEmail);
+  
+  // 1. Delete from Supabase
+  try {
+    if (userId) {
+      await supabase.from('memberships').delete().eq('user_id', userId);
+      await supabase.from('profiles').delete().eq('id', userId);
+    }
+    if (cleanEmail) {
+      const { data: prof } = await supabase.from('profiles').select('id').eq('email', cleanEmail).maybeSingle();
+      if (prof?.id) {
+        await supabase.from('memberships').delete().eq('user_id', prof.id);
+      }
+      await supabase.from('profiles').delete().eq('email', cleanEmail);
+    }
+  } catch (err) {
+    console.warn('Supabase delete error:', err);
+  }
+
+  // 2. Delete from LocalStorage
+  try {
+    const dbStr = localStorage.getItem('cufy_registered_users');
+    if (dbStr) {
+      let dbUsers = JSON.parse(dbStr);
+      dbUsers = dbUsers.filter(u => {
+        const uEmail = (u.email || '').toLowerCase().trim();
+        return uEmail !== cleanEmail && u.id !== userId;
+      });
+      localStorage.setItem('cufy_registered_users', JSON.stringify(dbUsers));
+    }
+    const activeStr = localStorage.getItem('cufy_active_user');
+    if (activeStr) {
+      const active = JSON.parse(activeStr);
+      if (active.email && active.email.toLowerCase().trim() === cleanEmail) {
+        localStorage.removeItem('cufy_active_user');
+      }
+    }
+  } catch (err) {}
+}
+
+// Revoke user access with an explicit reason and move them to rejected
+export async function revokeCloudUser(userId, userEmail, reason = 'Access revoked by administrator.') {
+  return await updateCloudUserStatus(userId, userEmail, 'rejected', {
+    rejectionReason: reason
+  });
 }
