@@ -317,13 +317,13 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
       className="animate-fade-in"
     >
       
-      {/* 1. PHOTO LAYER (Framed perfectly at upper portion without excessive zoom) */}
+      {/* 1. FULL-HEIGHT BACKGROUND PHOTO (Extends all the way down, no awkward crop) */}
       <div style={{
         position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
-        height: '70%',
+        bottom: 0,
         overflow: 'hidden',
         zIndex: 1
       }}>
@@ -335,10 +335,9 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
             height: '100%',
             objectFit: 'cover',
             objectPosition: 'center top',
-            transform: animStage >= 1 ? 'scale(1)' : 'scale(1.03)',
             opacity: animStage >= 1 ? 1 : 0,
-            transition: 'transform 2.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.8s ease-out',
-            willChange: 'transform, opacity'
+            transition: 'opacity 0.8s ease-out',
+            willChange: 'opacity'
           }}
           loading="eager"
         />
@@ -349,22 +348,22 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
           top: 0,
           left: 0,
           right: 0,
-          height: '90px',
-          background: 'linear-gradient(180deg, rgba(0, 0, 0, 0.35) 0%, rgba(0, 0, 0, 0) 100%)',
+          height: '110px',
+          background: 'linear-gradient(180deg, rgba(0, 0, 0, 0.42) 0%, rgba(0, 0, 0, 0) 100%)',
           pointerEvents: 'none',
           opacity: animStage >= 3 ? 1 : 0,
           transition: 'opacity 0.8s ease-out'
         }}></div>
       </div>
 
-      {/* 2. SEAMLESS PHOTO-TO-WHITE GRADIENT (Zero hard borders, zero solid grey card) */}
+      {/* 2. SEAMLESS PHOTO-TO-WHITE GRADIENT (Soft natural transition into clean white) */}
       <div style={{
         position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0) 38%, rgba(255, 255, 255, 0.22) 46%, rgba(255, 255, 255, 0.65) 56%, rgba(255, 255, 255, 0.94) 65%, #FFFFFF 72%, #FFFFFF 100%)',
+        background: 'linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0) 38%, rgba(255, 255, 255, 0.35) 48%, rgba(255, 255, 255, 0.78) 58%, rgba(255, 255, 255, 0.96) 68%, #FFFFFF 80%, #FFFFFF 100%)',
         pointerEvents: 'none',
         zIndex: 2,
         opacity: animStage >= 3 ? 1 : 0,
@@ -444,33 +443,41 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
         transform: animStage >= 3 ? 'translateY(0)' : 'translateY(40px)',
         transition: 'opacity 0.9s ease-out, transform 0.9s cubic-bezier(0.16, 1, 0.3, 1)'
       }}>
-        {/* Editorial Headline: Just One Day */}
+        {/* Editorial Headline: Just One Day (Thick font weight & high contrast visible colors) */}
         <div style={{
           textAlign: 'center',
-          marginBottom: '24px',
+          marginBottom: '26px',
           width: '100%'
         }}>
           <div style={{
             fontFamily: "'Playfair Display', Georgia, serif",
-            fontSize: '3.4rem',
-            lineHeight: '0.94',
-            letterSpacing: '-0.5px',
-            fontWeight: 500,
+            fontSize: '3.6rem',
+            lineHeight: '0.92',
+            letterSpacing: '-1px',
+            fontWeight: 800,
             userSelect: 'none'
           }}>
-            <div style={{ color: '#FFFFFF', textShadow: '0 2px 14px rgba(0, 0, 0, 0.35)' }}>
+            <div style={{
+              color: '#111827',
+              fontWeight: 800,
+              textShadow: '0 1px 2px rgba(255, 255, 255, 0.6)'
+            }}>
               Just
             </div>
             <div style={{
               fontStyle: 'italic',
-              color: '#DE8E7F',
-              fontWeight: 500,
+              color: '#D9483B',
+              fontWeight: 800,
               margin: '2px 0',
-              textShadow: '0 2px 10px rgba(0, 0, 0, 0.2)'
+              textShadow: '0 1px 2px rgba(255, 255, 255, 0.4)'
             }}>
               One
             </div>
-            <div style={{ color: '#FFFFFF', textShadow: '0 2px 14px rgba(0, 0, 0, 0.35)' }}>
+            <div style={{
+              color: '#111827',
+              fontWeight: 800,
+              textShadow: '0 1px 2px rgba(255, 255, 255, 0.6)'
+            }}>
               Day
             </div>
           </div>
@@ -480,22 +487,22 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
             alignItems: 'center',
             justifyContent: 'center',
             gap: '8px',
-            marginTop: '12px'
+            marginTop: '14px'
           }}>
             <span style={{
               fontFamily: "'Plus Jakarta Sans', sans-serif",
               fontStyle: 'italic',
-              fontSize: '1.05rem',
-              fontWeight: 600,
-              color: '#27272A',
+              fontSize: '1.08rem',
+              fontWeight: 700,
+              color: '#18181B',
               letterSpacing: '-0.2px'
             }}>
               the right one
             </span>
             <span style={{
-              width: '24px',
-              height: '2.5px',
-              backgroundColor: '#DE8E7F',
+              width: '26px',
+              height: '3px',
+              backgroundColor: '#D9483B',
               borderRadius: '2px',
               display: 'inline-block'
             }}></span>
