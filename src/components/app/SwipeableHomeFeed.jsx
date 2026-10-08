@@ -537,93 +537,100 @@ export default function SwipeableHomeFeed({
           alignItems: 'center',
           gap: '12px',
           zIndex: 70,
-          background: 'rgba(255, 255, 255, 0.88)',
+          background: 'rgba(255, 255, 255, 0.92)',
           backdropFilter: 'blur(20px)',
-          padding: '10px 16px',
-          borderRadius: '32px',
+          padding: '8px 14px',
+          borderRadius: '999px',
           border: '1.5px solid rgba(255, 255, 255, 0.95)',
-          boxShadow: '0 16px 36px rgba(0, 0, 0, 0.12)'
+          boxShadow: '0 16px 36px rgba(0, 0, 0, 0.08)'
         }}>
           {/* 1. Boost Lightning Button */}
           <button 
             onClick={handleZapClick}
             style={{
-              width: '56px',
-              height: '56px',
-              borderRadius: '20px',
-              background: isBoostLive ? '#FFF0F0' : '#09090B',
+              width: '48px',
+              height: '48px',
+              borderRadius: '50%',
+              background: isBoostLive ? '#FFF0F0' : '#F4F4F5',
               color: '#FF3B30',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: isBoostLive ? '0 0 18px rgba(255,59,48,0.45)' : '0 6px 18px rgba(0,0,0,0.18)',
-              border: isBoostLive ? '2px solid #FF3B30' : 'none',
+              boxShadow: isBoostLive ? '0 0 16px rgba(255,59,48,0.4)' : 'none',
+              border: isBoostLive ? '2px solid #FF3B30' : '1px solid #E4E4E7',
+              cursor: 'pointer',
               transition: 'transform 0.2s var(--ease-spring)'
             }}
             aria-label="Boost profile"
             title={isBoostLive ? "Boost is Live (24h)" : "Get a Profile Boost"}
           >
-            <Zap size={26} fill="#FF3B30" stroke="#FF3B30" />
+            <Zap size={22} fill="#FF3B30" stroke="#FF3B30" />
           </button>
 
           {/* 2. Pass / Cross Button */}
           <button 
             onClick={() => handleNextProfile('pass')}
             style={{
-              width: '64px',
-              height: '64px',
-              borderRadius: '22px',
-              background: '#09090B',
-              color: '#FFFFFF',
+              width: '58px',
+              height: '58px',
+              borderRadius: '50%',
+              background: '#FFFFFF',
+              color: '#09090B',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.24)',
+              border: '1.5px solid #E4E4E7',
+              boxShadow: '0 6px 18px rgba(0,0,0,0.06)',
+              cursor: 'pointer',
               transition: 'transform 0.2s var(--ease-spring)'
             }}
             aria-label="Reject profile"
           >
-            <X size={32} strokeWidth={2.8} />
+            <X size={28} strokeWidth={2.5} />
           </button>
 
           {/* 3. Like Button */}
           <button 
             onClick={() => handleNextProfile('like')}
             style={{
-              width: '64px',
-              height: '64px',
-              borderRadius: '22px',
+              width: '62px',
+              height: '62px',
+              borderRadius: '50%',
               background: '#09090B',
               color: '#FF3B30',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.24)',
+              border: 'none',
+              boxShadow: '0 8px 24px rgba(9,9,11,0.22)',
+              cursor: 'pointer',
               transition: 'transform 0.2s var(--ease-spring)'
             }}
             aria-label="Like profile"
           >
-            <Heart size={32} fill="#FF3B30" stroke="#FF3B30" />
+            <Heart size={30} fill="#FF3B30" stroke="#FF3B30" />
           </button>
 
           {/* 4. Superlike Button */}
           <button 
             onClick={() => handleNextProfile('superlike')}
             style={{
-              width: '56px',
-              height: '56px',
-              borderRadius: '20px',
-              background: '#93C5FD',
-              color: '#09090B',
+              width: '48px',
+              height: '48px',
+              borderRadius: '50%',
+              background: '#FFFBEB',
+              color: '#D97706',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 6px 18px rgba(147, 197, 253, 0.4)',
+              border: '1.5px solid #FCD34D',
+              boxShadow: '0 4px 12px rgba(245, 158, 11, 0.15)',
+              cursor: 'pointer',
               transition: 'transform 0.2s var(--ease-spring)'
             }}
             aria-label="Superlike profile"
           >
-            <Star size={26} fill="#09090B" stroke="#09090B" />
+            <Star size={22} fill="#F59E0B" stroke="#F59E0B" />
           </button>
         </div>
       )}

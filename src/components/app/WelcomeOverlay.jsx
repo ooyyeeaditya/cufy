@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Sparkles, Shield, Heart } from 'lucide-react';
+import { ArrowRight, Shield } from 'lucide-react';
 
 export default function WelcomeOverlay({ userProfile, onClose }) {
   const [phase, setPhase] = useState(1); // 1: Haikei Splash ("cufy."), 2: Guidelines Interstitial
   const [isExiting, setIsExiting] = useState(false);
 
-  // Auto-advance from Phase 1 (Splash) to Phase 2 after 1.8s
+  // Auto-advance from Phase 1 (Splash) to Phase 2 after 2.5s (Slow & smooth transition)
   useEffect(() => {
     const timer = setTimeout(() => {
       setPhase(2);
-    }, 1800);
+    }, 2500);
     return () => clearTimeout(timer);
   }, []);
 
@@ -17,7 +17,7 @@ export default function WelcomeOverlay({ userProfile, onClose }) {
     setIsExiting(true);
     setTimeout(() => {
       onClose();
-    }, 400);
+    }, 450);
   };
 
   return (
@@ -31,7 +31,7 @@ export default function WelcomeOverlay({ userProfile, onClose }) {
       flexDirection: 'column',
       overflow: 'hidden',
       opacity: isExiting ? 0 : 1,
-      transition: 'opacity 0.4s ease-in-out'
+      transition: 'opacity 0.45s ease-in-out'
     }}>
 
       {/* ========================================================================= */}
@@ -75,13 +75,13 @@ export default function WelcomeOverlay({ userProfile, onClose }) {
               color: '#71717A',
               textTransform: 'uppercase',
               letterSpacing: '3px',
-              marginBottom: '8px'
+              marginBottom: '10px'
             }} className="animate-slide-up-1">
               Welcome to
             </div>
 
             <h1 style={{
-              fontSize: '3.6rem',
+              fontSize: '3.8rem',
               fontWeight: 900,
               fontFamily: 'serif',
               fontStyle: 'italic',
@@ -112,10 +112,10 @@ export default function WelcomeOverlay({ userProfile, onClose }) {
       {phase === 2 && (
         <div className="full-screen-interstitial animate-fade-in" style={{ position: 'relative', flex: 1, height: '100%' }}>
           
-          {/* Edge-to-Edge Full Screen Image */}
+          {/* Edge-to-Edge Full Screen Image (Ananya Sharma photo /front1.jpg) */}
           <img 
-            src="/photos/couple2.jpg" 
-            alt="Couple togetherness portrait" 
+            src="/photos/front1.jpg" 
+            alt="Authentic connection portrait" 
             className="interstitial-bg-img" 
             loading="eager"
           />
@@ -171,21 +171,6 @@ export default function WelcomeOverlay({ userProfile, onClose }) {
 
           {/* Bottom Vignette Overlay Anchored at Bottom of Viewport */}
           <div className="interstitial-vignette-overlay">
-            <div style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: '#FFF0F0',
-              color: '#FF3B30',
-              fontSize: '0.72rem',
-              fontWeight: 800,
-              padding: '4px 10px',
-              borderRadius: '999px',
-              marginBottom: '10px'
-            }} className="animate-slide-up-1">
-              <Heart size={12} fill="#FF3B30" /> Real & Kind Environment
-            </div>
-
             <h2 className="editorial-title animate-slide-up-1" style={{ fontSize: '2.1rem', fontWeight: 900, color: '#09090B', marginBottom: '8px' }}>
               Treat Everyone with Kindness & Respect.
             </h2>

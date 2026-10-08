@@ -298,22 +298,8 @@ export function getProfilesForUser(userProfile, registeredUsers = [], filters = 
     return true;
   });
 
-  // 2. Select matching profiles: If real registered users exist, return ONLY real users!
-  let combined = [];
-  if (realMatchedUsers.length > 0) {
-    combined = [...realMatchedUsers];
-  } else {
-    // Fallback curated profiles only if zero real registered users exist in DB
-    let curatedList = [];
-    if (targetGender === 'Woman') {
-      curatedList = FEMALE_CURATED_PROFILES;
-    } else if (targetGender === 'Man') {
-      curatedList = MALE_CURATED_PROFILES;
-    } else {
-      curatedList = [...FEMALE_CURATED_PROFILES, ...MALE_CURATED_PROFILES];
-    }
-    combined = [...curatedList];
-  }
+  // 2. Select matching profiles: STRICTLY return ONLY real registered users!
+  const combined = [...realMatchedUsers];
 
   // 3. Format all profiles for feed
   let formatted = combined.map(formatProfileForFeed).filter(Boolean);

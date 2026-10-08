@@ -186,28 +186,13 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
               <h1 style={{ fontSize: '1.9rem', fontWeight: 900, color: '#09090B', letterSpacing: '-0.8px', margin: 0 }}>
                 {profileData.name.toLowerCase()}
               </h1>
-              {/* Verified Badge */}
-              <div style={{
-                width: '20px',
-                height: '20px',
-                borderRadius: '50%',
-                background: userProfile?.is_verified ? '#10B981' : '#A1A1AA',
-                color: '#FFFFFF',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.7rem'
-              }}>
-                ✓
-              </div>
             </div>
             <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#71717A', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <Sparkles size={13} color="#FF3B30" />
               <span style={{ fontWeight: 800, color: '#09090B' }}>
                 {userProfile?.gender === 'Woman' ? 'Cufy VIP' : (userProfile?.plan || 'VIP Pass')}
               </span>
               <span style={{ color: '#D4D4D8' }}>•</span>
-              <span style={{ color: '#059669', fontWeight: 800 }}>Active Member</span>
+              <span style={{ color: '#09090B', fontWeight: 800 }}>Active Member</span>
             </div>
           </div>
 
