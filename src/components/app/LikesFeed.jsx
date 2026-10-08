@@ -1,12 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Heart, MessageSquare } from 'lucide-react';
-import { HOME_SWIPE_PROFILES } from '../../data/mockProfiles';
+import { getProfilesForUser, HOME_SWIPE_PROFILES } from '../../data/mockProfiles';
+import { fetchAllCloudUsers } from '../../lib/cloudSync';
 
-export default function LikesFeed({ onSelectProfile, onOpenChat }) {
+export default function LikesFeed({ onSelectProfile, onOpenChat, userProfile }) {
   const [activeTab, setActiveTab] = useState('likes_you'); // 'likes_you' | 'you_liked'
+  const [profiles, setProfiles] = useState(() => getProfilesForUser(userProfile));
 
-  const likesYouProfiles = HOME_SWIPE_PROFILES;
-  const youLikedProfiles = HOME_SWIPE_PROFILES.slice(1);
+  useEffect(() => {
+    async function loadProfiles() {
+      try {
+        const cloudUsers = await fetchAllCloudUsers();
+        setProfiles(getProfilesForUser(userProfile, cloudUsers));
+      } catch (e) {
+        setProfiles(getProfilesForUser(userProfile));
+      }
+    }
+    loadProfiles();
+  }, [userProfile?.gender, userProfile?.interested_in, userProfile?.email]);
+
+  const likesYouProfiles = profiles;
+  const youLikedProfiles = profiles.slice(1);
 
   return (
     <div style={{

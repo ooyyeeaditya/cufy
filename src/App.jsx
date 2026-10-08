@@ -50,6 +50,7 @@ export default function App() {
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
   const [isTermsOpen, setIsTermsOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [activeFilters, setActiveFilters] = useState(null);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
 
@@ -77,6 +78,8 @@ export default function App() {
         boostCredits: user.boostCredits !== undefined ? user.boostCredits : (user.plan?.includes('799') || user.plan?.includes('month') || user.plan?.includes('VIP') ? 1 : 0),
         boostActiveUntil: user.boostActiveUntil || null,
         paymentProofUrl: user.paymentProofUrl || user.paymentProof || null,
+        voiceNoteUrl: user.voiceNoteUrl || user.voice_note_url || null,
+        voice_note_url: user.voiceNoteUrl || user.voice_note_url || null,
         matches: user.matches || [],
         payments: user.payments || [{ plan: user.plan || '1 Month Pass', amount: '₹799', date: 'Today', status: user.status === 'approved' ? 'Approved' : 'Pending', screenshot: user.paymentProofUrl || null }]
       };
@@ -122,7 +125,7 @@ export default function App() {
             const cleanEmail = parsed.email.toLowerCase().trim();
             const { data: dbProf } = await supabase
               .from('profiles')
-              .select('id, is_verified, account_status, prompt2_answer, photos')
+              .select('id, is_verified, account_status, prompt2_answer, photos, voice_note_url')
               .eq('email', cleanEmail)
               .maybeSingle();
 
@@ -166,11 +169,16 @@ export default function App() {
 
             const isVerified = Boolean(dbProf.is_verified || (mem && mem.status === 'approved'));
 
+            const isDbPending = mem?.status === 'pending' || (parsed && (parsed.status === 'pending_approval' || parsed.status === 'pending'));
+
             let updatedStatus = parsed.status;
             if (dbProf.account_status === 'Suspended') updatedStatus = 'suspended';
             else if (isDbRejected) updatedStatus = 'rejected';
             else if (isExpired) updatedStatus = 'expired';
-            else if (isVerified || parsed.gender === 'Woman') updatedStatus = 'approved';
+            else if (isDbPending) {
+              updatedStatus = 'pending_approval';
+            }
+            else if (isVerified || (parsed.gender === 'Woman' && parsed.status !== 'pending_approval')) updatedStatus = 'approved';
             else updatedStatus = 'pending_approval';
 
             const realDbPhotos = (dbProf.photos && Array.isArray(dbProf.photos) && dbProf.photos.length > 0)
@@ -183,6 +191,8 @@ export default function App() {
               is_verified: isVerified,
               rejectionReason,
               photos: realDbPhotos,
+              voiceNoteUrl: dbProf.voice_note_url || parsed.voiceNoteUrl || null,
+              voice_note_url: dbProf.voice_note_url || parsed.voice_note_url || null,
               startsAt: mem?.starts_at || parsed.startsAt || null,
               expiresAt: mem?.expires_at || parsed.expiresAt || null,
               plan: mem?.plan_type ? formatPlanName(mem.plan_type) : parsed.plan
@@ -403,8 +413,20 @@ export default function App() {
           return;
         }
 
-        // 5. Check if approved
-        if (dbProf && (dbProf.is_verified || mem?.status === 'approved' || userProfile.gender === 'Woman')) {
+        // 5. Check if pending approval vs approved
+        const isDbPending = mem?.status === 'pending' || (userProfile && (userProfile.status === 'pending_approval' || userProfile.status === 'pending'));
+
+        if (isDbPending && !isDbRejected) {
+          if (userProfile.status !== 'pending_approval') {
+            const pendingUser = {
+              ...userProfile,
+              status: 'pending_approval',
+              is_verified: false
+            };
+            setUserProfile(pendingUser);
+            localStorage.setItem('cufy_active_user', JSON.stringify(pendingUser));
+          }
+        } else if (dbProf && (dbProf.is_verified || mem?.status === 'approved' || (userProfile.gender === 'Woman' && userProfile.status !== 'pending_approval'))) {
           if (userProfile.status !== 'approved') {
             const startsAt = mem?.starts_at || now.toISOString();
             const expiresAt = mem?.expires_at || new Date(now.getTime() + 30 * 86400000).toISOString();
@@ -915,6 +937,7 @@ export default function App() {
                   {appTab === 'home' && (
                     <SwipeableHomeFeed 
                       userProfile={userProfile}
+                      activeFilters={activeFilters}
                       onUpdateProfile={handleUpdateProfile}
                       onOpenChat={handleOpenChat}
                       onSelectProfile={handleSelectProfile}
@@ -928,6 +951,7 @@ export default function App() {
                   {/* Likes Tab: Who Liked You & You Liked */}
                   {(appTab === 'likes' || appTab === 'explore') && (
                     <LikesFeed 
+                      userProfile={userProfile}
                       onSelectProfile={handleSelectProfile}
                       onOpenChat={(profile) => handleSendMessageFromMatch(profile)}
                     />
@@ -1042,7 +1066,8 @@ export default function App() {
                 isOpen={isFilterOpen}
                 onClose={() => setIsFilterOpen(false)}
                 onApplyFilters={(filters) => {
-                  console.log('Applied filters:', filters);
+                  setActiveFilters(filters);
+                  setIsFilterOpen(false);
                 }}
               />
 

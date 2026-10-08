@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Heart, X, Star, Zap, Sliders, Bell, Home, MapPin, Compass, GraduationCap, Award, RefreshCw, Mic, Play, Pause, Volume2, Camera, Check } from 'lucide-react';
-import { HOME_SWIPE_PROFILES } from '../../data/mockProfiles';
+import { getProfilesForUser, HOME_SWIPE_PROFILES } from '../../data/mockProfiles';
+import { fetchAllCloudUsers } from '../../lib/cloudSync';
 import { fileToCompressedBase64 } from '../../utils/imageUpload';
 
 export default function SwipeableHomeFeed({ 
@@ -11,9 +12,11 @@ export default function SwipeableHomeFeed({
   onOpenSettings,
   onTriggerMatch,
   userProfile,
-  onUpdateProfile
+  onUpdateProfile,
+  activeFilters
 }) {
-  const [deck, setDeck] = useState(HOME_SWIPE_PROFILES);
+  const [deck, setDeck] = useState(() => getProfilesForUser(userProfile, [], activeFilters));
+  const [isLoadingDeck, setIsLoadingDeck] = useState(false);
   const [glideClass, setGlideClass] = useState('');
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
 
@@ -27,6 +30,25 @@ export default function SwipeableHomeFeed({
 
   const isBoostLive = Boolean(userProfile?.boostActiveUntil && new Date(userProfile.boostActiveUntil) > new Date());
   const boostCredits = userProfile?.boostCredits || 0;
+
+  const loadProfilesDeck = async () => {
+    setIsLoadingDeck(true);
+    try {
+      const registeredUsers = await fetchAllCloudUsers();
+      const profiles = getProfilesForUser(userProfile, registeredUsers, activeFilters);
+      setDeck(profiles);
+    } catch (err) {
+      console.warn('Profile deck load error:', err);
+      const fallback = getProfilesForUser(userProfile, [], activeFilters);
+      setDeck(fallback);
+    } finally {
+      setIsLoadingDeck(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProfilesDeck();
+  }, [userProfile?.gender, userProfile?.interested_in, userProfile?.email, JSON.stringify(activeFilters)]);
 
   const handleZapClick = () => {
     if (isBoostLive) {
@@ -55,7 +77,8 @@ export default function SwipeableHomeFeed({
       onUpdateProfile(updated);
     }
     setShowBoostConfirmModal(false);
-    setBoostToast('⚡ Boost Activated! Your profile is at the top of every girl\'s feed for 24 hours.');
+    const targetText = userProfile?.gender === 'Woman' ? "guy's" : "girl's";
+    setBoostToast(`⚡ Boost Activated! Your profile is at the top of every ${targetText} feed for 24 hours.`);
     setTimeout(() => setBoostToast(''), 4000);
   };
 
@@ -83,7 +106,7 @@ export default function SwipeableHomeFeed({
   };
 
   const handleResetDeck = () => {
-    setDeck(HOME_SWIPE_PROFILES);
+    loadProfilesDeck();
   };
 
   return (

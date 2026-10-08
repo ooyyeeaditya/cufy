@@ -1,11 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, SlidersHorizontal, Heart, X, Sparkles } from 'lucide-react';
-import { EXPLORE_PROFILES } from '../../data/mockProfiles';
+import { getProfilesForUser, EXPLORE_PROFILES } from '../../data/mockProfiles';
+import { fetchAllCloudUsers } from '../../lib/cloudSync';
 
-export default function ExploreFeed({ onSelectProfile }) {
+export default function ExploreFeed({ onSelectProfile, userProfile }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilters, setActiveFilters] = useState(['active lifestyle', 'serious relationship', 'pet lover']);
   const [likedMap, setLikedMap] = useState({});
+  const [exploreProfiles, setExploreProfiles] = useState(() => getProfilesForUser(userProfile));
+
+  useEffect(() => {
+    async function loadProfiles() {
+      try {
+        const cloudUsers = await fetchAllCloudUsers();
+        setExploreProfiles(getProfilesForUser(userProfile, cloudUsers));
+      } catch (e) {
+        setExploreProfiles(getProfilesForUser(userProfile));
+      }
+    }
+    loadProfiles();
+  }, [userProfile?.gender, userProfile?.interested_in, userProfile?.email]);
 
   const removeFilter = (tag) => {
     setActiveFilters(activeFilters.filter(t => t !== tag));
@@ -16,13 +30,13 @@ export default function ExploreFeed({ onSelectProfile }) {
     setLikedMap(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const filteredProfiles = EXPLORE_PROFILES.filter(p => {
+  const filteredProfiles = exploreProfiles.filter(p => {
     if (!searchTerm) return true;
     const q = searchTerm.toLowerCase();
     return (
-      p.name.toLowerCase().includes(q) ||
-      p.tag.toLowerCase().includes(q) ||
-      p.bio.toLowerCase().includes(q)
+      (p.name && p.name.toLowerCase().includes(q)) ||
+      (p.tag && p.tag.toLowerCase().includes(q)) ||
+      (p.bio && p.bio.toLowerCase().includes(q))
     );
   });
 

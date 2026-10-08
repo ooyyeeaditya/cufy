@@ -351,6 +351,7 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
             status: isApproved ? 'approved' : (isRejected ? 'rejected' : 'pending'),
             rejectionReason: u.rejectionReason || '',
             photos: (u.photos && Array.isArray(u.photos) && u.photos.filter(Boolean).length > 0) ? u.photos.filter(Boolean) : [],
+            voiceNoteUrl: u.voiceNoteUrl || u.voice_note_url || null,
             bio: u.bio || '',
             prompt1: u.prompt1 || '',
             prompt1_answer: u.prompt1_answer || '',
@@ -2583,6 +2584,21 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                         <div style={{ color: '#52525B', marginTop: '2px' }}>{selectedProfileUser.prompt2_answer}</div>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* 7. Voice Introduction Audio Card */}
+                {(selectedProfileUser.voiceNoteUrl || selectedProfileUser.voice_note_url) && (
+                  <div style={{ background: '#FFFFFF', border: '1.5px solid #E4E4E7', borderRadius: '18px', padding: '14px', marginBottom: '14px' }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 900, color: '#09090B', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Mic size={15} color="#FF3B30" />
+                      Voice Introduction Audio
+                    </div>
+                    <audio 
+                      controls 
+                      src={selectedProfileUser.voiceNoteUrl || selectedProfileUser.voice_note_url} 
+                      style={{ width: '100%', height: '40px', borderRadius: '10px' }} 
+                    />
                   </div>
                 )}
 

@@ -165,12 +165,13 @@ export async function syncUserToCloud(record) {
     // Check if profile already exists in Supabase
     const { data: existingProf } = await supabase
       .from('profiles')
-      .select('id, photos')
+      .select('id, photos, voice_note_url')
       .eq('email', userEmail)
       .maybeSingle();
 
     // Clean photos: filter out any fake/stock unsplash URLs
     const realPhotos = (syncPayload.photos || []).filter(u => typeof u === 'string' && u.length > 5 && !u.includes('unsplash.com'));
+    const voiceNote = record.voiceNoteUrl || record.voice_note_url || syncPayload.voiceNoteUrl || null;
 
     const profileData = {
       email: userEmail,
@@ -182,6 +183,7 @@ export async function syncUserToCloud(record) {
       account_status: syncPayload.status === 'suspended' ? 'Suspended' : 'Active',
       is_verified: syncPayload.status === 'approved',
       photos: realPhotos,
+      voice_note_url: voiceNote,
       bio: record.bio || '',
       prompt1: record.prompt1 || '',
       prompt1_answer: record.prompt1Answer || record.prompt1_answer || '',
@@ -204,6 +206,9 @@ export async function syncUserToCloud(record) {
       // If new real photos were uploaded, use them; otherwise keep existing real photos
       if (realPhotos.length === 0 && existingProf.photos && existingProf.photos.length > 0) {
         profileData.photos = existingProf.photos.filter(u => typeof u === 'string' && !u.includes('unsplash.com'));
+      }
+      if (!voiceNote && existingProf.voice_note_url) {
+        profileData.voice_note_url = existingProf.voice_note_url;
       }
       await supabase
         .from('profiles')
@@ -238,24 +243,31 @@ export async function syncUserToCloud(record) {
         user_id: finalProfileId,
         plan_type: dbPlanType,
         price: syncPayload.gender === 'Woman' ? 0 : (record.planPrice || 799),
-        screenshot_url: cleanScreenshot,
         status: syncPayload.status === 'approved' ? 'approved' : 'pending',
         starts_at: syncPayload.startsAt || null,
         expires_at: syncPayload.expiresAt || null
       };
 
+      if (cleanScreenshot) {
+        memPayload.screenshot_url = cleanScreenshot;
+      }
+
       const { data: existingMem } = await supabase
         .from('memberships')
-        .select('id')
+        .select('id, screenshot_url')
         .eq('user_id', finalProfileId)
         .maybeSingle();
 
       if (existingMem?.id) {
+        if (!cleanScreenshot && existingMem.screenshot_url) {
+          memPayload.screenshot_url = existingMem.screenshot_url;
+        }
         await supabase
           .from('memberships')
           .update(memPayload)
           .eq('id', existingMem.id);
       } else {
+        memPayload.screenshot_url = cleanScreenshot;
         await supabase
           .from('memberships')
           .insert(memPayload);
@@ -346,6 +358,8 @@ export async function fetchAllCloudUsers() {
           rejectionReason = p.prompt2_answer.replace('[REJECTION]:', '').trim();
         }
 
+        const isDbPending = mem?.status === 'pending' || (existing && (existing.status === 'pending_approval' || existing.status === 'pending'));
+
         let userStatus = 'pending_approval';
         if (p.account_status === 'Suspended') {
           userStatus = 'suspended';
@@ -354,8 +368,12 @@ export async function fetchAllCloudUsers() {
         } else if (isDbRejected) {
           userStatus = 'rejected';
           isVerified = false;
+        } else if (isDbPending) {
+          // If explicitly pending verification review (e.g. initial signup or after re-submission), keep as pending!
+          userStatus = 'pending_approval';
+          isVerified = false;
         } else if (p.gender === 'Woman') {
-          // Auto-approved for women unless suspended or explicitly rejected
+          // Auto-approved for women initial signup unless pending verification re-submit or explicitly rejected
           userStatus = 'approved';
           isVerified = true;
         } else if (isVerified) {
@@ -410,6 +428,8 @@ export async function fetchAllCloudUsers() {
           registered: p.created_at ? new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : (existing?.registered || 'Today'),
           photos: realUserPhotos,
           paymentProofUrl: proof,
+          voiceNoteUrl: p.voice_note_url || existing?.voiceNoteUrl || null,
+          voice_note_url: p.voice_note_url || existing?.voice_note_url || null,
           matches: existing?.matches || [],
           payments: [{
             plan: planName,

@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Check, Lock, CreditCard, ShieldCheck, Sparkles, MapPin, Zap, Pause, Play, Bell, Mic, Copy, Eye, Plus, Minus, Heart, User, Trash2, Camera, HelpCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Lock, CreditCard, ShieldCheck, Sparkles, MapPin, Zap, Pause, Play, Bell, Mic, Copy, Eye, Plus, Minus, Heart, User, Trash2, Camera, HelpCircle, AlertCircle } from 'lucide-react';
 import { validateName, validateEmail, validatePhotos, checkRateLimit } from '../../utils/validation';
 import { fileToCompressedBase64 } from '../../utils/imageUpload';
+import VoiceNoteRecorder from '../common/VoiceNoteRecorder';
 
 export default function OnboardingWizard({ initialData, onCompleteOnboarding, onCancel }) {
   // Total onboarding step count including question steps and interstitials
   const [step, setStep] = useState(1);
   const totalSteps = 19;
+  const [stepError, setStepError] = useState('');
 
   // File Input Ref for User Photo Uploads
   const fileInputRef = useRef(null);
@@ -46,6 +48,7 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
     prompt1Answer: '',
     prompt2: 'I get along best with people who...',
     prompt2Answer: '',
+    voiceNoteUrl: null,
     voiceRecorded: false
   });
 
@@ -198,38 +201,85 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
     return () => clearInterval(interval);
   }, [step, isTimerPaused]);
 
+  // Clear step error when step changes
+  useEffect(() => {
+    setStepError('');
+  }, [step]);
+
   // Calculate age from day/month/year
   const triggerAgeCheck = () => {
-    const y = parseInt(formData.year) || 2004;
-    const currentYear = new Date().getFullYear();
-    const age = currentYear - y;
+    const d = parseInt(formData.day, 10) || 1;
+    const m = parseInt(formData.month, 10) || 1;
+    const y = parseInt(formData.year, 10) || 2002;
+    const birthDate = new Date(y, m - 1, d);
+    const now = new Date();
+    let age = now.getFullYear() - birthDate.getFullYear();
+    const mDiff = now.getMonth() - birthDate.getMonth();
+    if (mDiff < 0 || (mDiff === 0 && now.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    if (age < 18) {
+      setStepError('You must be at least 18 years old to join Cufy.');
+      return false;
+    }
     setCalculatedAge(age > 0 ? age : 22);
     setShowAgePopup(true);
+    return true;
   };
 
   const handleNext = () => {
     if (!checkRateLimit('onboarding_next', 150)) return;
 
+    // STEP 1: Phone Validation (Compulsory, 10 digits)
+    if (step === 1) {
+      const digitsOnly = (formData.phone || '').replace(/\D/g, '');
+      if (digitsOnly.length < 10) {
+        setStepError('Please enter a valid 10-digit mobile number to continue.');
+        return;
+      }
+      setStepError('');
+    }
+
+    // STEP 2: Name & Email Validation (Both Compulsory)
+    if (step === 2) {
+      const trimmedName = (formData.name || '').trim();
+      if (trimmedName.length < 2) {
+        setStepError('Please enter your name (minimum 2 characters) to continue.');
+        return;
+      }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!formData.email || !emailRegex.test(formData.email.trim())) {
+        setStepError('Please enter a valid email address to continue.');
+        return;
+      }
+      setStepError('');
+    }
+
+    // STEP 3: Age / Birthday Validation (Compulsory, >= 18)
     if (step === 3 && !showAgePopup) {
-      triggerAgeCheck();
+      const valid = triggerAgeCheck();
+      if (!valid) return;
       return;
     }
 
-    // Require at least 1 profile photo on step 16
+    // STEP 16: Profile Photos (Compulsory, MINIMUM 2 PHOTOS!)
     if (step === 16) {
-      const hasPhoto = formData.photos.some(Boolean);
-      if (!hasPhoto) {
-        alert('Please upload at least one profile photo (Main DP) to continue.');
+      const uploadedCount = (formData.photos || []).filter(p => Boolean(p) && typeof p === 'string' && p.length > 20).length;
+      if (uploadedCount < 2) {
+        setStepError('Please upload at least 2 profile photos to continue.');
         return;
       }
+      setStepError('');
     }
 
+    setStepError('');
     if (step < totalSteps) {
       setStep(prev => prev + 1);
     }
   };
 
   const handlePrev = () => {
+    setStepError('');
     if (step > 1) {
       setStep(prev => prev - 1);
     } else {
@@ -248,6 +298,7 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
 
     // Verify payment screenshot for men
     if (formData.gender !== 'Woman' && !paymentProofUrl) {
+      setStepError('Please upload your UPI payment transaction screenshot before submitting.');
       alert('Please upload your UPI payment transaction screenshot before submitting.');
       return;
     }
@@ -260,12 +311,13 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
         const planDays = formData.gender === 'Woman' ? 365 : (selectedPlan.id === 'day_199' ? 1 : selectedPlan.id === 'week_299' ? 7 : selectedPlan.id === 'days15_499' ? 15 : 30);
         const completedData = {
           ...formData,
-          photos: formData.photos.filter(Boolean),
+          photos: formData.photos.filter(p => Boolean(p) && typeof p === 'string' && p.length > 20),
           plan: formData.gender === 'Woman' ? 'Free Pass for Women' : selectedPlan.title,
           planId: formData.gender === 'Woman' ? 'free_women' : selectedPlan.id,
           planPrice: formData.gender === 'Woman' ? 0 : selectedPlan.price,
           planDays: planDays,
-          paymentProofUrl,
+          paymentProofUrl: formData.gender === 'Woman' ? null : paymentProofUrl,
+          voiceNoteUrl: formData.voiceNoteUrl || null,
           status: formData.gender === 'Woman' ? 'approved' : 'pending_approval'
         };
         onCompleteOnboarding(completedData);
@@ -323,9 +375,13 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
         const newPhotos = [...formData.photos];
         newPhotos[activeSlotIdx] = imageUrl;
         setFormData(prev => ({ ...prev, photos: newPhotos }));
+        setStepError('');
       } catch (err) {
         console.error('Failed to convert photo:', err);
       }
+    }
+    if (e.target) {
+      e.target.value = '';
     }
   };
 
@@ -470,8 +526,33 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
             <ArrowLeft size={24} strokeWidth={2.5} />
           </button>
           
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 800, color: '#71717A' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 800, color: '#71717A' }}>
             <span>Step {step} of {totalSteps}</span>
+            {step === 18 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setStepError('');
+                  setStep(prev => prev + 1);
+                }}
+                style={{
+                  background: '#FFFFFF',
+                  border: '1.5px solid #D4D4D8',
+                  padding: '3px 10px',
+                  borderRadius: '12px',
+                  color: '#09090B',
+                  fontSize: '0.78rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+                title="Skip voice recording"
+              >
+                Skip <ArrowRight size={13} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -485,28 +566,53 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
       <div style={{ flex: 1, position: 'relative', zIndex: 10, overflowY: 'auto', padding: '0 4px 12px', display: 'flex', flexDirection: 'column' }}>
         <form key={step} onSubmit={(e) => { e.preventDefault(); handleNext(); }} className="step-glide-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
 
-        
+          {/* Clean Real-time Validation Error Banner */}
+          {stepError && (
+            <div style={{
+              background: '#FEF2F2',
+              border: '1px solid #FECACA',
+              color: '#DC2626',
+              padding: '10px 14px',
+              borderRadius: '14px',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              marginBottom: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <AlertCircle size={16} flexShrink={0} />
+              <span>{stepError}</span>
+            </div>
+          )}
+
           {/* STEP 1: Phone Number */}
           {step === 1 && (
             <div>
               <h1 className="editorial-title">Can we get your number?</h1>
-              <p className="editorial-subtitle">Cufy uses your phone number to verify authentic members.</p>
+              <p className="editorial-subtitle">Cufy uses your phone number to verify authentic members (Compulsory).</p>
 
               <div className="form-group" style={{ marginTop: '16px' }}>
-                <label className="form-label">Phone Number</label>
+                <label className="form-label">Phone Number *</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <input 
                     type="text" 
                     defaultValue="+91" 
                     style={{ width: '75px', textAlign: 'center', fontWeight: 800 }} 
                     className="form-input" 
+                    readOnly
                   />
                   <input 
                     type="tel" 
                     value={formData.phone} 
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })} 
+                    onChange={(e) => {
+                      setFormData({ ...formData, phone: e.target.value });
+                      if (stepError) setStepError('');
+                    }} 
                     placeholder="98765 43210"
                     className="form-input"
+                    maxLength={15}
+                    required
                   />
                 </div>
               </div>
@@ -517,25 +623,35 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
           {step === 2 && (
             <div>
               <h1 className="editorial-title">What is your name & email?</h1>
-              <p className="editorial-subtitle">Your name will be visible to your daily connection.</p>
+              <p className="editorial-subtitle">Both fields are strictly required to verify your profile.</p>
 
               <div className="form-group">
-                <label className="form-label">First Name</label>
+                <label className="form-label">First Name *</label>
                 <input 
                   type="text" 
                   value={formData.name} 
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })} 
+                  onChange={(e) => {
+                    setFormData({ ...formData, name: e.target.value });
+                    if (stepError) setStepError('');
+                  }} 
+                  placeholder="Enter your name"
                   className="form-input"
+                  required
                 />
               </div>
 
               <div className="form-group">
-                <label className="form-label">Email Address</label>
+                <label className="form-label">Email Address *</label>
                 <input 
                   type="email" 
                   value={formData.email} 
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })} 
+                  onChange={(e) => {
+                    setFormData({ ...formData, email: e.target.value });
+                    if (stepError) setStepError('');
+                  }} 
+                  placeholder="name@example.com"
                   className="form-input"
+                  required
                 />
               </div>
             </div>
@@ -545,37 +661,46 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
           {step === 3 && (
             <div>
               <h1 className="editorial-title" style={{ fontFamily: 'serif', fontStyle: 'normal' }}>When's your birthday?</h1>
-              <p className="editorial-subtitle">We'll only show your age on your profile.</p>
+              <p className="editorial-subtitle">Must be at least 18 years old to join Cufy.</p>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '12px', margin: '24px 0' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <label className="form-label" style={{ fontSize: '0.78rem' }}>DAY</label>
+                  <label className="form-label" style={{ fontSize: '0.78rem' }}>DAY *</label>
                   <input 
                     type="text" 
                     value={formData.day} 
-                    onChange={(e) => setFormData({ ...formData, day: e.target.value })} 
+                    onChange={(e) => {
+                      setFormData({ ...formData, day: e.target.value });
+                      if (stepError) setStepError('');
+                    }} 
                     className="form-input" 
                     style={{ textAlign: 'center', fontSize: '1.2rem', fontWeight: 800 }} 
                   />
                 </div>
 
                 <div style={{ textAlign: 'center' }}>
-                  <label className="form-label" style={{ fontSize: '0.78rem' }}>MONTH</label>
+                  <label className="form-label" style={{ fontSize: '0.78rem' }}>MONTH *</label>
                   <input 
                     type="text" 
                     value={formData.month} 
-                    onChange={(e) => setFormData({ ...formData, month: e.target.value })} 
+                    onChange={(e) => {
+                      setFormData({ ...formData, month: e.target.value });
+                      if (stepError) setStepError('');
+                    }} 
                     className="form-input" 
                     style={{ textAlign: 'center', fontSize: '1.2rem', fontWeight: 800 }} 
                   />
                 </div>
 
                 <div style={{ textAlign: 'center' }}>
-                  <label className="form-label" style={{ fontSize: '0.78rem' }}>YEAR</label>
+                  <label className="form-label" style={{ fontSize: '0.78rem' }}>YEAR *</label>
                   <input 
                     type="text" 
                     value={formData.year} 
-                    onChange={(e) => setFormData({ ...formData, year: e.target.value })} 
+                    onChange={(e) => {
+                      setFormData({ ...formData, year: e.target.value });
+                      if (stepError) setStepError('');
+                    }} 
                     className="form-input" 
                     style={{ textAlign: 'center', fontSize: '1.2rem', fontWeight: 800 }} 
                   />
@@ -1044,106 +1169,149 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
             </div>
           )}
 
-          {/* STEP 16: Profile Photos Upload - CLEAN EMPTY UPLOAD CARDS */}
-          {step === 16 && (
-            <div>
-              <h1 className="editorial-title">Add profile photos</h1>
-              <p className="editorial-subtitle">Tap empty boxes to upload photos from camera or gallery.</p>
+          {/* STEP 16: Profile Photos Upload - COMPULSORY MINIMUM 2 PHOTOS */}
+          {step === 16 && (() => {
+            const uploadedCount = (formData.photos || []).filter(p => Boolean(p) && typeof p === 'string' && p.length > 20).length;
+            return (
+              <div>
+                <h1 className="editorial-title">Add profile photos</h1>
+                <p className="editorial-subtitle">Upload at least 2 photos so matches can see the real you (Compulsory).</p>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px', marginBottom: '20px' }}>
-                {formData.photos.map((photoUrl, idx) => {
-                  const hasPhoto = Boolean(photoUrl);
-                  return (
-                    <div 
-                      key={idx}
-                      onClick={() => !hasPhoto && triggerPhotoUpload(idx)}
-                      style={{
-                        height: '160px',
-                        borderRadius: '22px',
-                        overflow: 'hidden',
-                        position: 'relative',
-                        background: '#FFFFFF',
-                        border: hasPhoto ? '2px solid #FF3B30' : '2px dashed #D4D4D8',
-                        boxShadow: hasPhoto ? '0 6px 20px rgba(255,59,48,0.18)' : '0 4px 14px rgba(0,0,0,0.02)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        transition: 'all 0.25s var(--ease-spring)'
-                      }}
-                    >
-                      {hasPhoto ? (
-                        <>
-                          <img src={photoUrl} alt={`User uploaded photo ${idx+1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          <button 
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removePhoto(idx);
-                            }}
-                            style={{
-                              position: 'absolute',
-                              top: '8px',
-                              right: '8px',
-                              width: '28px',
-                              height: '28px',
-                              borderRadius: '10px',
-                              background: 'rgba(9,9,11,0.75)',
-                              color: '#FFFFFF',
+                {/* Photo Requirement Status Badge */}
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: uploadedCount >= 2 ? '#ECFDF5' : '#FEF2F2',
+                  border: uploadedCount >= 2 ? '1px solid #A7F3D0' : '1px solid #FECACA',
+                  color: uploadedCount >= 2 ? '#065F46' : '#DC2626',
+                  padding: '5px 14px',
+                  borderRadius: '999px',
+                  fontSize: '0.78rem',
+                  fontWeight: 800,
+                  marginBottom: '16px'
+                }}>
+                  {uploadedCount >= 2 ? (
+                    <>
+                      <Check size={14} /> {uploadedCount} photos uploaded (Requirement satisfied)
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle size={14} /> {uploadedCount} of 2 required photos uploaded
+                    </>
+                  )}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px', marginBottom: '20px' }}>
+                  {formData.photos.map((photoUrl, idx) => {
+                    const hasPhoto = Boolean(photoUrl);
+                    return (
+                      <div 
+                        key={idx}
+                        onClick={() => !hasPhoto && triggerPhotoUpload(idx)}
+                        style={{
+                          height: '160px',
+                          borderRadius: '22px',
+                          overflow: 'hidden',
+                          position: 'relative',
+                          background: '#FFFFFF',
+                          border: hasPhoto ? '2px solid #FF3B30' : (idx < 2 && uploadedCount < 2) ? '2px dashed #F87171' : '2px dashed #D4D4D8',
+                          boxShadow: hasPhoto ? '0 6px 20px rgba(255,59,48,0.18)' : '0 4px 14px rgba(0,0,0,0.02)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          transition: 'all 0.25s var(--ease-spring)'
+                        }}
+                      >
+                        {hasPhoto ? (
+                          <>
+                            <img src={photoUrl} alt={`User uploaded photo ${idx+1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <button 
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removePhoto(idx);
+                              }}
+                              style={{
+                                position: 'absolute',
+                                top: '8px',
+                                right: '8px',
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '10px',
+                                background: 'rgba(9,9,11,0.75)',
+                                color: '#FFFFFF',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                              aria-label="Remove photo"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                            {idx === 0 && (
+                              <span style={{
+                                position: 'absolute',
+                                bottom: '8px',
+                                left: '8px',
+                                fontSize: '0.7rem',
+                                fontWeight: 800,
+                                background: '#FF3B30',
+                                color: '#FFFFFF',
+                                padding: '3px 8px',
+                                borderRadius: '8px'
+                              }}>
+                                Main Photo *
+                              </span>
+                            )}
+                            {idx === 1 && (
+                              <span style={{
+                                position: 'absolute',
+                                bottom: '8px',
+                                left: '8px',
+                                fontSize: '0.7rem',
+                                fontWeight: 800,
+                                background: '#09090B',
+                                color: '#FFFFFF',
+                                padding: '3px 8px',
+                                borderRadius: '8px'
+                              }}>
+                                Photo 2 *
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <div style={{
+                              width: '42px',
+                              height: '42px',
+                              borderRadius: '14px',
+                              background: '#FFF0F0',
+                              color: '#FF3B30',
                               display: 'flex',
                               alignItems: 'center',
-                              justifyContent: 'center'
-                            }}
-                            aria-label="Remove photo"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                          {idx === 0 && (
-                            <span style={{
-                              position: 'absolute',
-                              bottom: '8px',
-                              left: '8px',
-                              fontSize: '0.7rem',
-                              fontWeight: 800,
-                              background: '#FF3B30',
-                              color: '#FFFFFF',
-                              padding: '3px 8px',
-                              borderRadius: '8px'
+                              justifyContent: 'center',
+                              marginBottom: '8px'
                             }}>
-                              Main Photo
+                              <Plus size={22} />
+                            </div>
+                            <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#09090B' }}>
+                              {idx === 0 ? 'Main Photo *' : (idx === 1 ? 'Photo 2 *' : `Photo ${idx + 1}`)}
                             </span>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <div style={{
-                            width: '42px',
-                            height: '42px',
-                            borderRadius: '14px',
-                            background: '#FFF0F0',
-                            color: '#FF3B30',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            marginBottom: '8px'
-                          }}>
-                            <Plus size={22} />
-                          </div>
-                          <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#09090B' }}>
-                            {idx === 0 ? 'Main Photo' : `Photo ${idx + 1}`}
-                          </span>
-                          <span style={{ fontSize: '0.7rem', color: '#71717A', fontWeight: 500, marginTop: '2px' }}>
-                            Tap to upload
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
+                            <span style={{ fontSize: '0.7rem', color: (idx < 2 && uploadedCount < 2) ? '#DC2626' : '#71717A', fontWeight: (idx < 2 && uploadedCount < 2) ? 700 : 500, marginTop: '2px' }}>
+                              {idx < 2 ? 'Compulsory' : 'Optional'}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* STEP 17: Written Intro Prompts & Bio */}
           {step === 17 && (
@@ -1216,65 +1384,67 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
             </div>
           )}
 
-          {/* STEP 18: Voice Intro Recording with Active 30-Second Countdown Timer */}
+          {/* STEP 18: Voice Intro Recording (Real AudioContext Recorder with Sound-Reactive Bars, Preview, Re-record & Skip) */}
           {step === 18 && (
             <div>
-              <h1 className="editorial-title">Record a Voice Note</h1>
-              <p className="editorial-subtitle">Let matches hear your voice intro (optional 30s recording).</p>
-
-              <div style={{
-                background: '#FFFFFF',
-                borderRadius: '24px',
-                padding: '30px 20px',
-                textAlign: 'center',
-                border: '1.5px solid #E4E4E7',
-                margin: '20px 0',
-                boxShadow: '0 8px 24px rgba(0,0,0,0.03)'
-              }}>
-                <div 
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h1 className="editorial-title" style={{ margin: 0 }}>Voice Intro</h1>
+                <button
+                  type="button"
                   onClick={() => {
-                    setIsRecording(!isRecording);
-                    if (!isRecording) setRecordedAudio(true);
+                    setStepError('');
+                    setStep(prev => prev + 1);
                   }}
                   style={{
-                    width: '72px',
-                    height: '72px',
-                    borderRadius: '50%',
-                    background: isRecording ? '#FF3B30' : '#FFF0F0',
-                    color: isRecording ? '#FFFFFF' : '#FF3B30',
+                    background: 'transparent',
+                    border: '1.5px solid #D4D4D8',
+                    color: '#09090B',
+                    padding: '6px 14px',
+                    borderRadius: '14px',
+                    fontSize: '0.8rem',
+                    fontWeight: 800,
+                    cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    margin: '0 auto 16px',
-                    cursor: 'pointer',
-                    boxShadow: isRecording ? '0 0 24px rgba(255, 59, 48, 0.6)' : 'none',
-                    transition: 'all 0.25s var(--ease-spring)'
+                    gap: '4px'
                   }}
                 >
-                  <Mic size={32} />
-                </div>
+                  Skip <ArrowRight size={14} />
+                </button>
+              </div>
+              <p className="editorial-subtitle" style={{ marginTop: '4px' }}>
+                Let matches hear your real voice intro (optional 30s recording).
+              </p>
 
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#09090B' }}>
-                  {isRecording ? `Recording... 00:${recordingSeconds < 10 ? '0' : ''}${recordingSeconds}` : recordedAudio ? 'Voice Note Recorded! (0:14)' : 'Tap to Record 30s Audio'}
-                </h3>
+              <VoiceNoteRecorder
+                initialAudioUrl={formData.voiceNoteUrl}
+                onRecordingComplete={(base64Url, duration) => {
+                  setFormData(prev => ({ ...prev, voiceNoteUrl: base64Url, voiceRecorded: true }));
+                }}
+                onDeleteRecording={() => {
+                  setFormData(prev => ({ ...prev, voiceNoteUrl: null, voiceRecorded: false }));
+                }}
+              />
 
-                {/* Animated Visualizer Sound Waves during recording */}
-                {isRecording && (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', marginTop: '16px' }}>
-                    {[14, 24, 18, 32, 20, 28, 12, 30, 22, 16, 26, 14, 20].map((h, i) => (
-                      <span 
-                        key={i} 
-                        style={{
-                          width: '4px',
-                          height: `${h}px`,
-                          background: '#FF3B30',
-                          borderRadius: '2px',
-                          animation: `pulse 0.5s infinite alternate ${i * 0.04}s`
-                        }} 
-                      />
-                    ))}
-                  </div>
-                )}
+              <div style={{ textAlign: 'center', marginTop: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStepError('');
+                    setStep(prev => prev + 1);
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#71717A',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    textDecoration: 'underline'
+                  }}
+                >
+                  I'll do this later, skip to next step →
+                </button>
               </div>
             </div>
           )}
@@ -1407,7 +1577,17 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
               {formData.gender === 'Woman' && selectedPlan.type === 'membership' ? (
                 <button 
                   type="button" 
-                  onClick={() => onCompleteOnboarding({ ...formData, status: 'approved' })} 
+                  onClick={() => onCompleteOnboarding({
+                    ...formData,
+                    photos: formData.photos.filter(p => Boolean(p) && typeof p === 'string' && p.length > 20),
+                    plan: 'Free Pass for Women',
+                    planId: 'free_women',
+                    planPrice: 0,
+                    planDays: 365,
+                    paymentProofUrl: null,
+                    voiceNoteUrl: formData.voiceNoteUrl || null,
+                    status: 'approved'
+                  })} 
                   className="btn-black-pill" 
                   style={{ width: '100%', padding: '16px' }}
                 >
@@ -1496,7 +1676,11 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
       {step < 19 && (
         <div style={{ position: 'relative', zIndex: 10, paddingTop: '12px', marginTop: 'auto' }}>
           <button type="button" onClick={handleNext} className="btn-black-pill">
-            <span>Continue</span>
+            <span>
+              {step === 18 
+                ? (formData.voiceNoteUrl ? 'Continue with Voice Note' : 'Continue') 
+                : 'Continue'}
+            </span>
           </button>
         </div>
       )}
@@ -1526,6 +1710,11 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
               <button 
                 type="button"
                 onClick={() => {
+                  if (calculatedAge < 18) {
+                    setStepError('You must be at least 18 years old to join Cufy.');
+                    setShowAgePopup(false);
+                    return;
+                  }
                   setShowAgePopup(false);
                   setStep(4); // Advance smoothly to Step 4 interstitial slide!
                 }} 
