@@ -298,25 +298,22 @@ export function getProfilesForUser(userProfile, registeredUsers = [], filters = 
     return true;
   });
 
-  // 2. Select matching curated fallback profiles
-  let curatedList = [];
-  if (targetGender === 'Woman') {
-    curatedList = FEMALE_CURATED_PROFILES;
-  } else if (targetGender === 'Man') {
-    curatedList = MALE_CURATED_PROFILES;
+  // 2. Select matching profiles: If real registered users exist, return ONLY real users!
+  let combined = [];
+  if (realMatchedUsers.length > 0) {
+    combined = [...realMatchedUsers];
   } else {
-    curatedList = [...FEMALE_CURATED_PROFILES, ...MALE_CURATED_PROFILES];
-  }
-
-  // Combine real users first, then curated fallback profiles (avoiding duplicates)
-  const combined = [...realMatchedUsers];
-  const existingEmails = new Set(realMatchedUsers.map(u => (u.email || '').toLowerCase()));
-
-  curatedList.forEach(c => {
-    if (!existingEmails.has(c.email.toLowerCase())) {
-      combined.push(c);
+    // Fallback curated profiles only if zero real registered users exist in DB
+    let curatedList = [];
+    if (targetGender === 'Woman') {
+      curatedList = FEMALE_CURATED_PROFILES;
+    } else if (targetGender === 'Man') {
+      curatedList = MALE_CURATED_PROFILES;
+    } else {
+      curatedList = [...FEMALE_CURATED_PROFILES, ...MALE_CURATED_PROFILES];
     }
-  });
+    combined = [...curatedList];
+  }
 
   // 3. Format all profiles for feed
   let formatted = combined.map(formatProfileForFeed).filter(Boolean);

@@ -201,12 +201,14 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
                 ✓
               </div>
             </div>
-            {userProfile?.expiresAt && (
-              <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#059669', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Clock size={13} />
-                {userProfile.plan || 'VIP Pass'} • Expires {new Date(userProfile.expiresAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit' })}
-              </div>
-            )}
+            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#71717A', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <Sparkles size={13} color="#FF3B30" />
+              <span style={{ fontWeight: 800, color: '#09090B' }}>
+                {userProfile?.gender === 'Woman' ? 'Cufy VIP' : (userProfile?.plan || 'VIP Pass')}
+              </span>
+              <span style={{ color: '#D4D4D8' }}>•</span>
+              <span style={{ color: '#059669', fontWeight: 800 }}>Active Member</span>
+            </div>
           </div>
 
           {/* Edit Profile Button */}

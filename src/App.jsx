@@ -21,6 +21,7 @@ import NotificationDrawer from './components/app/NotificationDrawer';
 import AdminPanel from './components/app/AdminPanel';
 import MembershipExpiredModal from './components/app/MembershipExpiredModal';
 import VerificationRejectedModal from './components/app/VerificationRejectedModal';
+import WelcomeOverlay from './components/app/WelcomeOverlay';
 
 import { INITIAL_DAILY_MATCH } from './data/mockProfiles';
 import { analytics } from './utils/analytics';
@@ -998,57 +999,12 @@ export default function App() {
                 </>
               )}
 
-              {/* WELCOME POPUP MODAL (For Women & Approved Members) */}
+              {/* FULL SCREEN ORGANIC WELCOME OVERLAY (Splash + Community Guidelines) */}
               {showWelcomeModal && (
-                <div style={{
-                  position: 'fixed',
-                  top: 0, left: 0, right: 0, bottom: 0,
-                  background: 'rgba(9, 9, 11, 0.75)',
-                  backdropFilter: 'blur(12px)',
-                  zIndex: 1000,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '20px'
-                }}>
-                  <div style={{
-                    background: '#FFFFFF',
-                    borderRadius: '28px',
-                    maxWidth: '360px',
-                    width: '100%',
-                    padding: '28px 24px',
-                    textAlign: 'center',
-                    boxShadow: '0 24px 60px rgba(0,0,0,0.25)',
-                    border: '1.5px solid #E4E4E7'
-                  }} className="animate-fade-in">
-                    <div style={{
-                      width: '64px', height: '64px', borderRadius: '20px',
-                      background: '#ECFDF5', color: '#10B981',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      margin: '0 auto 16px', boxShadow: '0 8px 24px rgba(16,185,129,0.2)'
-                    }}>
-                      <Sparkles size={32} />
-                    </div>
-
-                    <h3 style={{ fontSize: '1.5rem', fontWeight: 900, color: '#09090B', marginBottom: '8px' }}>
-                      Welcome to Cufy! ✨
-                    </h3>
-
-                    <p style={{ fontSize: '0.9rem', color: '#52525B', lineHeight: '1.45', marginBottom: '24px' }}>
-                      {userProfile?.gender === 'Woman' 
-                        ? 'Your profile is active with 100% free VIP access. Enjoy discovering authentic connections!' 
-                        : 'Your account is approved! Explore profiles and start matching now.'}
-                    </p>
-
-                    <button 
-                      onClick={() => setShowWelcomeModal(false)} 
-                      className="btn-black-pill"
-                      style={{ width: '100%', padding: '14px' }}
-                    >
-                      Explore Matches Now
-                    </button>
-                  </div>
-                </div>
+                <WelcomeOverlay 
+                  userProfile={userProfile} 
+                  onClose={() => setShowWelcomeModal(false)} 
+                />
               )}
 
               {/* IT'S A MATCH OVERLAY SCREEN */}

@@ -22,7 +22,7 @@ export function formatPlanName(plan) {
   if (p.includes('1_week') || p.includes('1 week') || p.includes('week_299')) return '1 Week Pass';
   if (p.includes('15_days') || p.includes('15 days') || p.includes('days15_499')) return '15 Days Pass';
   if (p.includes('1_month') || p.includes('1 month') || p.includes('month_799') || p.includes('vip')) return '1 Month VIP Pass';
-  if (p.includes('women') || p.includes('free')) return 'Free Pass for Women';
+  if (p.includes('women') || p.includes('free')) return 'Cufy VIP';
   return plan;
 }
 
