@@ -201,24 +201,20 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
     setIsGoogleLoading(true);
     setGoogleError('');
 
-    // 1. Primary: Official Google Identity Services OAuth 2.0 (Native Google Account Chooser Popup: accounts.google.com)
+    // 1. GIS Token Client (Official Google OAuth popup window: accounts.google.com)
     if (window.google?.accounts?.oauth2 && googleClientId) {
       try {
         const client = window.google.accounts.oauth2.initTokenClient({
           client_id: googleClientId,
           scope: 'email profile openid',
           callback: async (tokenRes) => {
-            if (tokenRes?.error) {
-              setIsGoogleLoading(false);
-              return;
-            }
+            setIsGoogleLoading(false);
             if (tokenRes?.access_token) {
               try {
                 const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
                   headers: { Authorization: `Bearer ${tokenRes.access_token}` }
                 });
                 const userInfo = await res.json();
-                setIsGoogleLoading(false);
                 setShowGoogleEmailModal(false);
                 handleGoogleUser({
                   email: userInfo.email,
@@ -226,7 +222,6 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
                   photo: userInfo.picture
                 });
               } catch (fetchErr) {
-                setIsGoogleLoading(false);
                 console.error('Failed to fetch Google profile:', fetchErr);
               }
             }
@@ -239,23 +234,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
       }
     }
 
-    // 2. Secondary: Supabase Auth Provider for Google OAuth (Redirects to accounts.google.com chooser)
-    if (supabase && supabase.auth) {
-      try {
-        const { error } = await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            queryParams: { prompt: 'select_account' },
-            redirectTo: window.location.origin
-          }
-        });
-        if (!error) return;
-      } catch (sbErr) {
-        console.warn('Supabase Google OAuth error:', sbErr);
-      }
-    }
-
-    // 3. Fallback: Open clean direct Google email input modal (Zero fake/saved lists)
+    // 2. Direct clean in-app Google Account Modal (Prevents raw Supabase 400 JSON error page)
     setIsGoogleLoading(false);
     setShowGoogleEmailModal(true);
   };
