@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Heart, ShieldCheck, CheckCircle2, AlertTriangle, Lock, LogIn, X, ChevronRight, User } from 'lucide-react';
 import { validateEmail } from '../../utils/validation';
 import { ENV } from '../../config/env';
@@ -22,7 +22,6 @@ function parseJwt(token) {
 }
 
 export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogleAuthSuccess }) {
-  const [showWarningModal, setShowWarningModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showGooglePlatterModal, setShowGooglePlatterModal] = useState(false);
 
@@ -35,9 +34,33 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
   const [showEmailInput, setShowEmailInput] = useState(false);
   
   const [loginEmail, setLoginEmail] = useState('');
+  const [loginPhone, setLoginPhone] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+
+  // Secret 5-Tap Gesture on Logo to open Admin Login modal
+  const logoClickCountRef = useRef(0);
+  const logoClickTimerRef = useRef(null);
+
+  const handleLogoClick = (e) => {
+    e.stopPropagation();
+    logoClickCountRef.current += 1;
+
+    if (logoClickTimerRef.current) {
+      clearTimeout(logoClickTimerRef.current);
+    }
+
+    if (logoClickCountRef.current >= 5) {
+      logoClickCountRef.current = 0;
+      setLoginError('');
+      setShowPasswordModal(true);
+    } else {
+      logoClickTimerRef.current = setTimeout(() => {
+        logoClickCountRef.current = 0;
+      }, 1500);
+    }
+  };
 
   // Google Platter Account List: Always pre-populated with real device/user accounts
   const [deviceAccounts, setDeviceAccounts] = useState([
@@ -52,19 +75,19 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
     const loadAccounts = async () => {
       const accountsMap = new Map();
 
-      // 1. Primary real user account
+      // 1. Primary real user account on this device
       accountsMap.set('iamdiamond301@gmail.com', {
         name: 'Aditya Chauhan',
         email: 'iamdiamond301@gmail.com',
         photo: null
       });
 
-      // 2. Add local storage active user if exists
+      // 2. Add local storage active user if exists on this device
       try {
         const activeStr = localStorage.getItem('cufy_active_user');
         if (activeStr) {
           const u = JSON.parse(activeStr);
-          if (u?.email) {
+          if (u?.email && !u.isAdmin) {
             accountsMap.set(u.email.toLowerCase(), {
               name: u.name || u.email.split('@')[0],
               email: u.email.toLowerCase(),
@@ -74,7 +97,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
         }
       } catch (e) {}
 
-      // 3. Add local registered users
+      // 3. Add local registered users from this device
       try {
         const regStr = localStorage.getItem('cufy_registered_users');
         if (regStr) {
@@ -92,30 +115,6 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
           }
         }
       } catch (e) {}
-
-      // 4. Fetch profiles from Supabase
-      if (supabase) {
-        try {
-          const { data } = await supabase
-            .from('profiles')
-            .select('email, name, photos')
-            .order('created_at', { ascending: false })
-            .limit(5);
-          if (data && Array.isArray(data)) {
-            data.forEach(item => {
-              if (item?.email && !item.email.includes('test_member') && !accountsMap.has(item.email.toLowerCase())) {
-                accountsMap.set(item.email.toLowerCase(), {
-                  name: item.name || item.email.split('@')[0],
-                  email: item.email.toLowerCase(),
-                  photo: item.photos?.[0] || null
-                });
-              }
-            });
-          }
-        } catch (sbErr) {
-          console.warn('Supabase profile query:', sbErr);
-        }
-      }
 
       setDeviceAccounts(Array.from(accountsMap.values()).slice(0, 3));
     };
@@ -325,38 +324,25 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
     });
   };
 
-  // Password Login Submit Handler
+  // Password Login Submit Handler (Admin Portal Access via 5-Tap Gesture)
   const handlePasswordLoginSubmit = (e) => {
     e.preventDefault();
     const trimmedEmail = loginEmail.trim().toLowerCase();
+    const cleanPhone = (loginPhone || '').replace(/\D/g, '');
     
-    // Admin credentials verification
-    const isAppAdmin = (trimmedEmail === 'cupid.livepro@gmail.com' || trimmedEmail === 'admin@cufy.app' || trimmedEmail === 'admin') && 
-                       (loginPassword === 'cUpid.livepro#@3210' || loginPassword === 'admin' || loginPassword === ENV.ADMIN_PASS_HASH);
+    // Admin credentials verification: Phone MUST be 7982026092 (or end with 7982026092)
+    const isPhoneValid = cleanPhone === '7982026092' || cleanPhone.endsWith('7982026092');
+    const isEmailValid = trimmedEmail === 'cupid.livepro@gmail.com' || trimmedEmail === 'admin@cufy.app' || trimmedEmail === 'admin';
+    const isPassValid = loginPassword === 'cUpid.livepro#@3210' || loginPassword === 'admin' || loginPassword === ENV.ADMIN_PASS_HASH;
 
-    if (isAppAdmin) {
+    if (isPassValid && isPhoneValid && isEmailValid) {
       setLoginError('');
       setShowPasswordModal(false);
-      onLoginSuccess({ email: 'cupid.livepro@gmail.com', name: 'Admin', isAdmin: true });
+      onLoginSuccess({ email: 'cupid.livepro@gmail.com', name: 'Admin', phone: '7982026092', isAdmin: true });
       return;
     }
 
-    // Check if regular user exists in registered database
-    try {
-      const dbStr = localStorage.getItem('cufy_registered_users');
-      const dbUsers = dbStr ? JSON.parse(dbStr) : [];
-      const matchedUser = dbUsers.find(u => u.email && u.email.toLowerCase() === trimmedEmail);
-      if (matchedUser) {
-        setLoginError('');
-        setShowPasswordModal(false);
-        onLoginSuccess(matchedUser);
-        return;
-      }
-    } catch (err) {
-      console.error(err);
-    }
-
-    setLoginError('Password login is reserved for Cufy Team Members only. Regular users please log in using Continue with Google.');
+    setLoginError('Invalid Admin Credentials. Access Denied.');
   };
 
   return (
@@ -375,7 +361,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
       className="animate-fade-in"
     >
       
-      {/* 1. FULL-HEIGHT BACKGROUND PHOTO (Extends all the way down, no awkward crop) */}
+      {/* 1. FULL-HEIGHT BACKGROUND PHOTO */}
       <div style={{
         position: 'absolute',
         top: 0,
@@ -400,7 +386,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
           loading="eager"
         />
 
-        {/* Top subtle vignette so top bar is always crisp & readable */}
+        {/* Top subtle vignette */}
         <div style={{
           position: 'absolute',
           top: 0,
@@ -414,7 +400,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
         }}></div>
       </div>
 
-      {/* 2. SEAMLESS PHOTO-TO-WHITE GRADIENT (Soft natural transition into clean white) */}
+      {/* 2. SEAMLESS PHOTO-TO-WHITE GRADIENT */}
       <div style={{
         position: 'absolute',
         top: 0,
@@ -449,24 +435,27 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
         CURATED DAILY
       </div>
 
-      {/* 4. ANIMATED CUFY. LOGO (Appears Center -> Smoothly moves to Top-Left) */}
+      {/* 4. ANIMATED CUFY LOGO (Appears Center -> Smoothly moves to Top-Left. 5 rapid clicks trigger Admin Portal) */}
       <div 
+        onClick={handleLogoClick}
         style={{
           position: 'absolute',
-          top: animStage >= 3 ? '22px' : '38%',
+          top: animStage >= 3 ? '22px' : '50%',
           left: animStage >= 3 ? '24px' : '50%',
           transform: animStage >= 3 
             ? 'translate(0, 0) scale(1)' 
             : (animStage >= 2 ? 'translate(-50%, -50%) scale(1.6)' : 'translate(-50%, -50%) scale(0.85)'),
           opacity: animStage >= 2 ? 1 : 0,
           transition: 'top 1.1s cubic-bezier(0.16, 1, 0.3, 1), left 1.1s cubic-bezier(0.16, 1, 0.3, 1), transform 1.1s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.5s ease-out',
-          zIndex: 35,
-          pointerEvents: 'none',
+          zIndex: 45,
+          pointerEvents: 'auto',
+          cursor: 'pointer',
           display: 'flex',
           alignItems: 'baseline',
           gap: '3px',
           userSelect: 'none'
         }}
+        title="Cufy"
       >
         <span style={{
           fontFamily: "'Plus Jakarta Sans', sans-serif",
@@ -488,7 +477,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
         }}></span>
       </div>
 
-      {/* 5. CONTENT LAYER: Headline & Action Buttons (Sits naturally in lower half) */}
+      {/* 5. CONTENT LAYER: Headline & Action Buttons */}
       <div style={{
         position: 'relative',
         zIndex: 10,
@@ -496,12 +485,12 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'flex-end',
-        padding: '0 24px 30px',
+        padding: '0 24px 36px',
         opacity: animStage >= 3 ? 1 : 0,
         transform: animStage >= 3 ? 'translateY(0)' : 'translateY(40px)',
         transition: 'opacity 0.9s ease-out, transform 0.9s cubic-bezier(0.16, 1, 0.3, 1)'
       }}>
-        {/* Editorial Headline: Just One Day (Single Horizontal Line) */}
+        {/* Editorial Headline: Just One Day */}
         <div style={{
           textAlign: 'center',
           marginBottom: '26px',
@@ -572,9 +561,9 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
         </div>
 
         {/* Buttons Stack */}
-        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '11px' }}>
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           
-          {/* Button 1: Get Started -> */}
+          {/* Button 1: Get Started */}
           <button 
             onClick={() => onStartOnboarding({ authType: 'email' })}
             style={{
@@ -659,25 +648,6 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
             </svg>
             <span>{isGoogleLoading ? 'Connecting...' : 'Continue with Google'}</span>
           </button>
-
-          {/* Link: Already a member? Log in */}
-          <div style={{ textAlign: 'center', marginTop: '4px' }}>
-            <button 
-              onClick={() => setShowWarningModal(true)} 
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#71717A',
-                fontSize: '0.92rem',
-                fontWeight: 500,
-                cursor: 'pointer',
-                fontFamily: "'Plus Jakarta Sans', sans-serif",
-                padding: '4px'
-              }}
-            >
-              Already a member? <span style={{ color: '#18181B', fontWeight: 700, textDecoration: 'underline' }}>Log in</span>
-            </button>
-          </div>
         </div>
       </div>
 
@@ -911,74 +881,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
         </div>
       )}
 
-      {/* PASSWORD LOGIN WARNING NOTICE MODAL (FOR TEAM / ADMIN ONLY) */}
-      {showWarningModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(9, 9, 11, 0.75)',
-          backdropFilter: 'blur(10px)',
-          zIndex: 1000,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '20px'
-        }}>
-          <div style={{
-            background: '#FFFFFF',
-            borderRadius: '28px',
-            maxWidth: '370px',
-            width: '100%',
-            padding: '28px 24px',
-            textAlign: 'center',
-            boxShadow: '0 24px 60px rgba(0,0,0,0.25)',
-            border: '1.5px solid #E4E4E7'
-          }} className="animate-fade-in">
-            <div style={{
-              width: '64px', height: '64px', borderRadius: '20px',
-              background: '#FEF2F2', color: '#DC2626',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              margin: '0 auto 16px', boxShadow: '0 8px 24px rgba(220,38,38,0.18)'
-            }}>
-              <AlertTriangle size={34} />
-            </div>
-
-            <h3 style={{ fontSize: '1.35rem', fontWeight: 900, color: '#09090B', marginBottom: '8px' }}>
-              Admin & Team Notice
-            </h3>
-
-            <p style={{ fontSize: '0.88rem', color: '#52525B', lineHeight: '1.45', marginBottom: '22px', fontWeight: 500 }}>
-              Password login method is strictly reserved for <b>Cufy Team Members & Admins</b>. Regular members please log in using <b>Continue with Google</b>.
-            </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <button 
-                onClick={() => {
-                  setShowWarningModal(false);
-                  setShowPasswordModal(true);
-                }} 
-                className="btn-primary" 
-                style={{ width: '100%', padding: '14px' }}
-              >
-                Proceed to Team Password Login
-              </button>
-
-              <button 
-                onClick={() => {
-                  setShowWarningModal(false);
-                  handleContinueWithGoogle();
-                }} 
-                className="btn-secondary" 
-                style={{ width: '100%', padding: '12px' }}
-              >
-                Use Google Login (Members)
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TEAM / ADMIN PASSWORD LOGIN FORM MODAL */}
+      {/* SECRET ADMIN PASSWORD LOGIN FORM MODAL (TRIGGERED BY 5 CONTINUOUS CLICKS ON CUFY LOGO) */}
       {showPasswordModal && (
         <div style={{
           position: 'fixed',
@@ -1002,10 +905,10 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
           }} className="animate-fade-in">
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
               <Lock size={20} style={{ color: '#FF3B30' }} />
-              <h3 style={{ fontSize: '1.45rem', fontWeight: 900, color: '#09090B' }}>Team Password Login</h3>
+              <h3 style={{ fontSize: '1.45rem', fontWeight: 900, color: '#09090B' }}>Admin Control Portal</h3>
             </div>
             <p style={{ fontSize: '0.88rem', color: '#52525B', marginBottom: '22px' }}>
-              Cufy Admin & Authorized Team Portal Login.
+              Secret Admin Portal Login.
             </p>
 
             <form onSubmit={handlePasswordLoginSubmit}>
@@ -1015,7 +918,19 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
                   type="email" 
                   value={loginEmail} 
                   onChange={(e) => setLoginEmail(e.target.value)} 
-                  placeholder="cupid.livepro@gmail.com" 
+                  placeholder="name@domain.com" 
+                  className={`form-input ${loginError ? 'error' : ''}`}
+                  required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginTop: '12px' }}>
+                <label className="form-label">Phone Number</label>
+                <input 
+                  type="tel" 
+                  value={loginPhone} 
+                  onChange={(e) => setLoginPhone(e.target.value)} 
+                  placeholder="+91 98765 43210" 
                   className={`form-input ${loginError ? 'error' : ''}`}
                   required
                 />

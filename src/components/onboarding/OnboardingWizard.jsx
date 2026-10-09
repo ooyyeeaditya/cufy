@@ -641,16 +641,26 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
               </div>
 
               <div className="form-group">
-                <label className="form-label">Email Address *</label>
+                <label className="form-label">
+                  Email Address * 
+                  {(initialData?.authProvider === 'google' || Boolean(initialData?.email)) && (
+                    <span style={{ fontSize: '0.74rem', color: '#16A34A', fontWeight: 700, marginLeft: '6px' }}>
+                      (Verified Google Account)
+                    </span>
+                  )}
+                </label>
                 <input 
                   type="email" 
                   value={formData.email} 
                   onChange={(e) => {
+                    if (initialData?.authProvider === 'google' || Boolean(initialData?.email)) return;
                     setFormData({ ...formData, email: e.target.value });
                     if (stepError) setStepError('');
                   }} 
+                  readOnly={initialData?.authProvider === 'google' || Boolean(initialData?.email)}
                   placeholder="name@example.com"
                   className="form-input"
+                  style={initialData?.authProvider === 'google' || Boolean(initialData?.email) ? { backgroundColor: '#F4F4F5', cursor: 'not-allowed', color: '#52525B', borderColor: '#E4E4E7' } : {}}
                   required
                 />
               </div>
