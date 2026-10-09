@@ -3,21 +3,61 @@ import { ArrowLeft, Send, ShieldCheck, CheckCheck, Bell, MessageSquare } from 'l
 import { HOME_SWIPE_PROFILES } from '../../data/mockProfiles';
 
 export default function ChatDrawer({ matchProfile, onBack, userProfile }) {
-  // Chat Logs State - Safe initialization without dummy profiles
-  const [conversations, setConversations] = useState([
-    {
-      id: 'cufy_official',
-      name: 'Cufy Team',
-      photo: '/photos/cufylogo.jpg',
-      lastMessage: 'Welcome to Cufy! Explore authentic profiles and connect.',
-      time: 'Just now',
-      unread: true,
-      badge: 'Official',
-      messages: [
-        { id: 1, sender: 'them', text: 'Welcome to Cufy! We are excited to have you here.', time: 'Just now' }
-      ]
+  const [userMatches, setUserMatches] = useState(() => {
+    try {
+      const saved = localStorage.getItem('cufy_user_matches');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) { return []; }
+  });
+
+  // Chat Logs State - Safe initialization with persistent storage
+  const [conversations, setConversations] = useState(() => {
+    try {
+      const savedStr = localStorage.getItem('cufy_conversations');
+      const savedMatchesStr = localStorage.getItem('cufy_user_matches');
+      let saved = savedStr ? JSON.parse(savedStr) : [];
+      let matches = savedMatchesStr ? JSON.parse(savedMatchesStr) : [];
+
+      matches.forEach(m => {
+        const threadId = (m.id || m.name).toLowerCase();
+        if (!saved.some(c => c.id === threadId)) {
+          const photoUrl = (m.photos && m.photos.length > 0) ? m.photos[0] : (m.photo || '/photos/front1.jpg');
+          saved.unshift({
+            id: threadId,
+            name: m.name,
+            photo: photoUrl,
+            lastMessage: `It's a Match! Say hi to ${m.name}`,
+            time: 'Just now',
+            unread: true,
+            badge: 'New Match',
+            messages: [
+              { id: 1, sender: 'them', text: `Hey! Excited to connect with you on Cufy!`, time: 'Just now' }
+            ]
+          });
+        }
+      });
+
+      if (saved.length === 0) {
+        saved = [
+          {
+            id: 'cufy_official',
+            name: 'Cufy Team',
+            photo: '/photos/cufylogo.jpg',
+            lastMessage: 'Welcome to Cufy! Explore authentic profiles and connect.',
+            time: 'Just now',
+            unread: true,
+            badge: 'Official',
+            messages: [
+              { id: 1, sender: 'them', text: 'Welcome to Cufy! We are excited to have you here.', time: 'Just now' }
+            ]
+          }
+        ];
+      }
+      return saved;
+    } catch (e) {
+      return [];
     }
-  ]);
+  });
 
   const [activeThreadId, setActiveThreadId] = useState(matchProfile ? matchProfile.name.toLowerCase() : null);
   const [inputText, setInputText] = useState('');
@@ -26,29 +66,49 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile }) {
   // Sync prop matchProfile if passed directly
   useEffect(() => {
     if (matchProfile && matchProfile.name) {
-      const threadId = matchProfile.name.toLowerCase();
-      const existing = conversations.find(c => c.id === threadId);
-      if (!existing) {
-        const photoUrl = (matchProfile.photos && matchProfile.photos.length > 0) 
-          ? matchProfile.photos[0] 
-          : '/photos/front1.jpg';
-        const newThread = {
-          id: threadId,
-          name: matchProfile.name,
-          photo: photoUrl,
-          lastMessage: `It's a Match! Say hi to ${matchProfile.name}`,
-          time: 'Just now',
-          unread: true,
-          badge: 'New Match',
-          messages: [
-            { id: 1, sender: 'them', text: `Hey! Excited to connect with you on Cufy!`, time: 'Just now' }
-          ]
-        };
-        setConversations(prev => [newThread, ...prev]);
-      }
+      const threadId = (matchProfile.id || matchProfile.name).toLowerCase();
+      const photoUrl = (matchProfile.photos && matchProfile.photos.length > 0) 
+        ? matchProfile.photos[0] 
+        : (matchProfile.photo || '/photos/front1.jpg');
+
+      // Update conversations list
+      setConversations(prev => {
+        const existing = prev.find(c => c.id === threadId);
+        let updated;
+        if (!existing) {
+          const newThread = {
+            id: threadId,
+            name: matchProfile.name,
+            photo: photoUrl,
+            lastMessage: `It's a Match! Say hi to ${matchProfile.name}`,
+            time: 'Just now',
+            unread: true,
+            badge: 'New Match',
+            messages: [
+              { id: 1, sender: 'them', text: `Hey! Excited to connect with you on Cufy!`, time: 'Just now' }
+            ]
+          };
+          updated = [newThread, ...prev];
+        } else {
+          updated = prev;
+        }
+        try { localStorage.setItem('cufy_conversations', JSON.stringify(updated)); } catch (e) {}
+        return updated;
+      });
+
+      // Update user matches list
+      setUserMatches(prev => {
+        let updated;
+        if (!prev.some(m => (m.id || m.name).toLowerCase() === threadId)) {
+          updated = [matchProfile, ...prev];
+        } else {
+          updated = prev;
+        }
+        try { localStorage.setItem('cufy_user_matches', JSON.stringify(updated)); } catch (e) {}
+        return updated;
+      });
+
       setActiveThreadId(threadId);
-    } else {
-      setActiveThreadId(null);
     }
   }, [matchProfile]);
 
@@ -65,17 +125,21 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile }) {
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    setConversations(prev => prev.map(c => {
-      if (c.id === activeThreadId) {
-        return {
-          ...c,
-          lastMessage: newMsg.text,
-          time: 'Just now',
-          messages: [...c.messages, newMsg]
-        };
-      }
-      return c;
-    }));
+    setConversations(prev => {
+      const updated = prev.map(c => {
+        if (c.id === activeThreadId) {
+          return {
+            ...c,
+            lastMessage: newMsg.text,
+            time: 'Just now',
+            messages: [...c.messages, newMsg]
+          };
+        }
+        return c;
+      });
+      try { localStorage.setItem('cufy_conversations', JSON.stringify(updated)); } catch (e) {}
+      return updated;
+    });
 
     setInputText('');
 
@@ -89,17 +153,21 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile }) {
         text: 'That sounds fantastic! Let us meet up this Saturday.',
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
-      setConversations(prev => prev.map(c => {
-        if (c.id === activeThreadId) {
-          return {
-            ...c,
-            lastMessage: replyMsg.text,
-            time: 'Just now',
-            messages: [...c.messages, replyMsg]
-          };
-        }
-        return c;
-      }));
+      setConversations(prev => {
+        const updated = prev.map(c => {
+          if (c.id === activeThreadId) {
+            return {
+              ...c,
+              lastMessage: replyMsg.text,
+              time: 'Just now',
+              messages: [...c.messages, replyMsg]
+            };
+          }
+          return c;
+        });
+        try { localStorage.setItem('cufy_conversations', JSON.stringify(updated)); } catch (e) {}
+        return updated;
+      });
     }, 1200);
   };
 
@@ -125,7 +193,7 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile }) {
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px 100px', position: 'relative', zIndex: 10 }}>
           
           {/* Header matching Likes Feed typography */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
             <h1 className="editorial-title" style={{
               fontSize: '2.2rem',
               fontWeight: 800,
@@ -168,6 +236,29 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile }) {
               </div>
             </div>
           </div>
+
+          {/* NEW MATCHES HORIZONTAL SCROLL BAR */}
+          {conversations.filter(c => c.id !== 'cufy_official').length > 0 && (
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#71717A', textTransform: 'uppercase', marginBottom: '10px', letterSpacing: '0.5px' }}>
+                New Matches ({conversations.filter(c => c.id !== 'cufy_official').length})
+              </div>
+              <div style={{ display: 'flex', gap: '14px', overflowX: 'auto', paddingBottom: '4px', scrollbarWidth: 'none' }}>
+                {conversations.filter(c => c.id !== 'cufy_official').map((matchItem) => (
+                  <div 
+                    key={matchItem.id} 
+                    onClick={() => setActiveThreadId(matchItem.id)}
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    <div style={{ width: '60px', height: '60px', borderRadius: '20px', overflow: 'hidden', border: '2px solid #FF3B30', boxShadow: '0 4px 14px rgba(255,59,48,0.2)' }}>
+                      <img src={matchItem.photo} alt={matchItem.name} onError={(e) => { e.target.src = '/photos/front1.jpg'; }} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#09090B', marginTop: '6px' }}>{matchItem.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Conversations Log List */}
           {conversations.length > 0 ? (

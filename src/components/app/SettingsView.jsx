@@ -531,7 +531,7 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
               textAlign: 'left'
             }}>
               <p style={{ fontSize: '0.88rem', fontWeight: 700, color: '#09090B', lineHeight: '1.45', margin: 0 }}>
-                Boost chala dein? Yeh <b>24 hours</b> ke liye active rhega and har ladki ke top pr aapki profile jaaegi.
+                Activate your profile boost? Your profile will be featured at the top of potential matches' feeds for <b>24 hours</b>.
               </p>
               <div style={{ fontSize: '0.75rem', color: '#71717A', marginTop: '6px', fontWeight: 600 }}>
                 ✓ 1 Boost credit will be used ({boostCredits} available)
@@ -602,8 +602,8 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
               ⚡ Get a Profile Boost
             </h3>
 
-            <p style={{ fontSize: '0.82rem', color: '#71717A', marginBottom: '16px', lineHeight: 1.4 }}>
-              Payment ke baad hi boost milta hai. Select a pack, transfer via UPI, and submit your payment screenshot for admin verification.
+            <p style={{ fontSize: '0.82rem', color: '#71717A', marginBottom: '16px', lineHeight: 1.45 }}>
+              Select a boost package, make your payment via UPI, and submit the transaction receipt for admin verification.
             </p>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px' }}>
@@ -693,7 +693,27 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
                   alert('Please upload your payment screenshot before submitting.');
                   return;
                 }
-                showToast('⚡ Boost Payment Proof submitted! Admin will verify and activate your boost.');
+                const reqObj = {
+                  id: `boost_req_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+                  userEmail: userProfile?.email || 'member@cufy.app',
+                  userName: userProfile?.name || 'Member',
+                  userGender: userProfile?.gender || 'Man',
+                  userPhoto: (userProfile?.photos && userProfile.photos[0]) || userProfile?.photo || '',
+                  packTitle: selectedBoostPack.title,
+                  packPrice: selectedBoostPack.price,
+                  screenshotUrl: boostScreenshot,
+                  status: 'pending',
+                  requestedAt: new Date().toISOString()
+                };
+
+                try {
+                  const existingStr = localStorage.getItem('cufy_boost_requests');
+                  const reqs = existingStr ? JSON.parse(existingStr) : [];
+                  reqs.unshift(reqObj);
+                  localStorage.setItem('cufy_boost_requests', JSON.stringify(reqs));
+                } catch (e) {}
+
+                showToast('Boost payment proof submitted! Admin will verify and activate your boost.');
                 setShowBoostPurchaseModal(false);
                 setBoostScreenshot(null);
               }}

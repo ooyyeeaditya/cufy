@@ -277,6 +277,7 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
   const [pendingPayments, setPendingPayments] = useState([]);
   const [usersList, setUsersList] = useState([]);
   const [expiredList, setExpiredList] = useState([]);
+  const [boostRequests, setBoostRequests] = useState([]);
 
   // Modals state
   const [selectedProfileUser, setSelectedProfileUser] = useState(null);
@@ -390,10 +391,55 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
 
         setPendingPayments(pending);
       }
+
+      // Load Profile Boost Requests
+      try {
+        const storedBoosts = JSON.parse(localStorage.getItem('cufy_boost_requests') || '[]');
+        setBoostRequests(storedBoosts);
+      } catch (bErr) {}
     } catch (err) {
       console.error('Error loading db users in AdminPanel:', err);
     }
   }, []);
+
+  // APPROVE BOOST HANDLER
+  const handleApproveBoost = (boostId) => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('cufy_boost_requests') || '[]');
+      const updated = stored.map(b => b.id === boostId ? { ...b, status: 'approved', approvedAt: new Date().toISOString() } : b);
+      localStorage.setItem('cufy_boost_requests', JSON.stringify(updated));
+      setBoostRequests(updated);
+
+      const target = updated.find(b => b.id === boostId);
+      if (target) {
+        // Activate boost on current profile if matches
+        const currentProfile = JSON.parse(localStorage.getItem('cufy_user_profile') || '{}');
+        if (currentProfile) {
+          const boostedUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+          const updatedProfile = { 
+            ...currentProfile, 
+            boostActiveUntil: boostedUntil, 
+            boostsCount: (currentProfile.boostsCount || 0) + (target.pack?.includes('15') ? 15 : target.pack?.includes('4') ? 4 : 1)
+          };
+          localStorage.setItem('cufy_user_profile', JSON.stringify(updatedProfile));
+        }
+      }
+    } catch (e) {
+      console.error('Approve boost error:', e);
+    }
+  };
+
+  // REJECT BOOST HANDLER
+  const handleRejectBoost = (boostId) => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('cufy_boost_requests') || '[]');
+      const updated = stored.map(b => b.id === boostId ? { ...b, status: 'rejected', rejectedAt: new Date().toISOString() } : b);
+      localStorage.setItem('cufy_boost_requests', JSON.stringify(updated));
+      setBoostRequests(updated);
+    } catch (e) {
+      console.error('Reject boost error:', e);
+    }
+  };
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
@@ -953,6 +999,19 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
               }}
             >
               <span>🛡️ Pending ({pendingVerifications.length})</span>
+            </button>
+
+            <button 
+              onClick={() => setActiveTab('boosts')}
+              style={{
+                padding: '8px 14px', borderRadius: '12px',
+                background: activeTab === 'boosts' ? '#09090B' : '#FFFFFF',
+                color: activeTab === 'boosts' ? '#FFFFFF' : '#71717A',
+                fontWeight: 800, fontSize: '0.78rem', border: '1px solid #E4E4E7', whiteSpace: 'nowrap', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '6px'
+              }}
+            >
+              <span>⚡ Boost Requests ({boostRequests.filter(b => b.status === 'pending').length})</span>
             </button>
 
             <button 
@@ -1937,6 +1996,137 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                   )}
                 </div>
 
+              </div>
+            )}
+
+            {/* =========================================================================
+                SCREEN 7: PROFILE BOOST REQUESTS QUEUE & APPROVALS
+                ========================================================================= */}
+            {activeTab === 'boosts' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 900, color: '#09090B' }}>
+                      Profile Boost Requests ⚡
+                    </div>
+                    <div style={{ fontSize: '0.76rem', color: '#71717A', fontWeight: 600 }}>
+                      Review payment receipts and approve profile boosts for members
+                    </div>
+                  </div>
+                </div>
+
+                {boostRequests.length === 0 ? (
+                  <div style={{
+                    background: '#FFFFFF',
+                    borderRadius: '24px',
+                    padding: '44px 20px',
+                    textAlign: 'center',
+                    border: '1.5px dashed #D4D4D8'
+                  }}>
+                    <Zap size={32} color="#F59E0B" style={{ margin: '0 auto 8px' }} />
+                    <div style={{ fontSize: '1rem', fontWeight: 900, color: '#09090B' }}>No Boost Requests Yet</div>
+                    <div style={{ fontSize: '0.78rem', color: '#71717A', marginTop: '4px' }}>
+                      Submitted boost payment screenshots will appear here for admin approval.
+                    </div>
+                  </div>
+                ) : (
+                  boostRequests.map((boost) => {
+                    const isPending = boost.status === 'pending';
+                    const isApproved = boost.status === 'approved';
+                    const isRejected = boost.status === 'rejected';
+
+                    return (
+                      <div 
+                        key={boost.id}
+                        style={{
+                          background: '#FFFFFF',
+                          borderRadius: '22px',
+                          padding: '16px',
+                          border: isPending ? '2px solid #F59E0B' : '1.5px solid #E4E4E7',
+                          boxShadow: '0 2px 10px rgba(0,0,0,0.03)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '14px'
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '0.98rem', fontWeight: 900, color: '#09090B' }}>
+                              {boost.userName || boost.name || 'Member'}
+                            </span>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#D97706', background: '#FEF3C7', padding: '2px 8px', borderRadius: '8px' }}>
+                              ⚡ {boost.pack} ({boost.price})
+                            </span>
+                          </div>
+
+                          <div style={{ fontSize: '0.76rem', color: '#71717A', marginTop: '4px', fontWeight: 600 }}>
+                            {boost.userEmail || boost.email} • {boost.userPhone || boost.phone || 'No phone'}
+                          </div>
+
+                          <div style={{ fontSize: '0.7rem', color: '#A1A1AA', marginTop: '2px', fontWeight: 600 }}>
+                            Submitted: {boost.timestamp ? new Date(boost.timestamp).toLocaleString() : 'Recently'}
+                          </div>
+                        </div>
+
+                        {/* Screenshot & Actions */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                          {boost.screenshotUrl ? (
+                            <div 
+                              onClick={() => {
+                                setSelectedScreenshot(boost.screenshotUrl);
+                                setScreenshotUserContext({ userName: boost.userName || boost.name, planName: boost.pack, amount: boost.price });
+                              }}
+                              style={{
+                                width: '46px', height: '52px', borderRadius: '12px', overflow: 'hidden', border: '1.5px solid #09090B', cursor: 'pointer', position: 'relative'
+                              }}
+                              title="Click to expand payment screenshot"
+                            >
+                              <img src={boost.screenshotUrl} alt="Receipt" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              <span style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(9,9,11,0.85)', color: '#FFF', fontSize: '0.5rem', fontWeight: 900, textAlign: 'center' }}>
+                                SS
+                              </span>
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: '0.7rem', color: '#DC2626', fontWeight: 800 }}>No Receipt</div>
+                          )}
+
+                          {isPending ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <button
+                                onClick={() => handleRejectBoost(boost.id)}
+                                style={{
+                                  width: '38px', height: '38px', borderRadius: '50%', background: '#FEE2E2', color: '#DC2626', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                }}
+                                title="Reject Boost Request"
+                              >
+                                <X size={18} strokeWidth={2.6} />
+                              </button>
+                              <button
+                                onClick={() => handleApproveBoost(boost.id)}
+                                style={{
+                                  padding: '8px 14px', borderRadius: '12px', background: '#10B981', color: '#FFFFFF', border: 'none', fontWeight: 900, fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', boxShadow: '0 2px 8px rgba(16,185,129,0.3)'
+                                }}
+                                title="Approve Boost & Grant 24h Boost"
+                              >
+                                <Zap size={14} fill="#FFFFFF" />
+                                Approve
+                              </button>
+                            </div>
+                          ) : isApproved ? (
+                            <span style={{ fontSize: '0.78rem', fontWeight: 900, color: '#059669', background: '#ECFDF5', padding: '6px 12px', borderRadius: '10px' }}>
+                              ✅ Boost Active
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '0.78rem', fontWeight: 900, color: '#DC2626', background: '#FEF2F2', padding: '6px 12px', borderRadius: '10px' }}>
+                              ✕ Rejected
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             )}
 

@@ -683,13 +683,55 @@ export default function App() {
     setAppTab(tab);
   };
 
+  const saveMatchToStorage = (profile) => {
+    if (!profile || !profile.name) return;
+    try {
+      const threadId = (profile.id || profile.name).toLowerCase();
+      
+      // 1. Save match profile to cufy_user_matches array
+      const matchesStr = localStorage.getItem('cufy_user_matches');
+      let matches = matchesStr ? JSON.parse(matchesStr) : [];
+      if (!matches.some(m => (m.id || m.name).toLowerCase() === threadId)) {
+        matches.unshift(profile);
+        localStorage.setItem('cufy_user_matches', JSON.stringify(matches));
+      }
+
+      // 2. Save match thread to cufy_conversations array
+      const convsStr = localStorage.getItem('cufy_conversations');
+      let convs = convsStr ? JSON.parse(convsStr) : [];
+      if (!convs.some(c => c.id === threadId)) {
+        const photoUrl = (profile.photos && profile.photos.length > 0)
+          ? profile.photos[0]
+          : (profile.photo || '/photos/front1.jpg');
+        const newThread = {
+          id: threadId,
+          name: profile.name,
+          photo: photoUrl,
+          lastMessage: `It's a Match! Say hi to ${profile.name}`,
+          time: 'Just now',
+          unread: true,
+          badge: 'New Match',
+          messages: [
+            { id: 1, sender: 'them', text: `Hey! Excited to connect with you on Cufy!`, time: 'Just now' }
+          ]
+        };
+        convs.unshift(newThread);
+        localStorage.setItem('cufy_conversations', JSON.stringify(convs));
+      }
+    } catch (err) {
+      console.warn('Save match error:', err);
+    }
+  };
+
   // Trigger "It's a Match!" celebration screen
   const handleTriggerMatch = (profile) => {
+    saveMatchToStorage(profile);
     setMatchedProfile(profile);
   };
 
   // Action from Match Modal: direct transition into Chat
   const handleSendMessageFromMatch = (profile) => {
+    saveMatchToStorage(profile);
     setMatchedProfile(null);
     setActiveChatMatch(profile);
     setAppTab('chat');
