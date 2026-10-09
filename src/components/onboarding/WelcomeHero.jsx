@@ -201,7 +201,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
     setIsGoogleLoading(true);
     setGoogleError('');
 
-    // 1. GIS Token Client (Official Google OAuth popup window: accounts.google.com)
+    // 1. Primary: GIS Token Client (Official Google OAuth popup window: accounts.google.com)
     if (window.google?.accounts?.oauth2 && googleClientId) {
       try {
         const client = window.google.accounts.oauth2.initTokenClient({
@@ -234,7 +234,23 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
       }
     }
 
-    // 2. Direct clean in-app Google Account Modal (Prevents raw Supabase 400 JSON error page)
+    // 2. Secondary: Supabase Auth Provider Google OAuth (Now active & enabled in Supabase!)
+    if (supabase && supabase.auth) {
+      try {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            queryParams: { prompt: 'select_account' },
+            redirectTo: window.location.origin
+          }
+        });
+        if (!error) return;
+      } catch (sbErr) {
+        console.warn('Supabase Google OAuth error:', sbErr);
+      }
+    }
+
+    // 3. Fallback: Direct clean in-app Google Account Modal
     setIsGoogleLoading(false);
     setShowGoogleEmailModal(true);
   };
