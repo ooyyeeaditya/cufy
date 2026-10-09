@@ -699,6 +699,28 @@ export default function App() {
       // 2. Save match thread to cufy_conversations array
       const convsStr = localStorage.getItem('cufy_conversations');
       let convs = convsStr ? JSON.parse(convsStr) : [];
+
+      if (!convs.some(c => c.id === 'cufy_official' || c.isOfficial)) {
+        convs.unshift({
+          id: 'cufy_official',
+          name: 'Cufy Official ⚡',
+          photo: '/photos/cufylogo.jpg',
+          lastMessage: 'Welcome to Cufy! Official announcements, boost approvals & updates appear here.',
+          time: 'Just now',
+          unread: false,
+          badge: 'Official',
+          isOfficial: true,
+          messages: [
+            { 
+              id: 1, 
+              sender: 'them', 
+              text: 'Welcome to Cufy! 🎉 Explore authentic profiles and connect. All platform announcements, profile boost approvals, and important notices will be sent right here.', 
+              time: 'Just now' 
+            }
+          ]
+        });
+      }
+
       if (!convs.some(c => c.id === threadId)) {
         const photoUrl = (profile.photos && profile.photos.length > 0)
           ? profile.photos[0]
@@ -716,8 +738,8 @@ export default function App() {
           ]
         };
         convs.unshift(newThread);
-        localStorage.setItem('cufy_conversations', JSON.stringify(convs));
       }
+      localStorage.setItem('cufy_conversations', JSON.stringify(convs));
     } catch (err) {
       console.warn('Save match error:', err);
     }

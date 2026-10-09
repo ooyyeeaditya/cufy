@@ -37,25 +37,54 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile }) {
         }
       });
 
-      if (saved.length === 0) {
-        saved = [
-          {
-            id: 'cufy_official',
-            name: 'Cufy Team',
-            photo: '/photos/cufylogo.jpg',
-            lastMessage: 'Welcome to Cufy! Explore authentic profiles and connect.',
-            time: 'Just now',
-            unread: true,
-            badge: 'Official',
-            messages: [
-              { id: 1, sender: 'them', text: 'Welcome to Cufy! We are excited to have you here.', time: 'Just now' }
-            ]
-          }
-        ];
+      // ALWAYS guarantee Cufy Official is present
+      const officialIdx = saved.findIndex(c => c.id === 'cufy_official' || c.isOfficial);
+      if (officialIdx < 0) {
+        saved.unshift({
+          id: 'cufy_official',
+          name: 'Cufy Official ⚡',
+          photo: '/photos/cufylogo.jpg',
+          lastMessage: 'Welcome to Cufy! Official announcements, boost approvals & updates appear here.',
+          time: 'Just now',
+          unread: false,
+          badge: 'Official',
+          isOfficial: true,
+          messages: [
+            { 
+              id: 1, 
+              sender: 'them', 
+              text: 'Welcome to Cufy! 🎉 Explore authentic profiles and connect. All platform announcements, profile boost approvals, and important notices will be sent right here.', 
+              time: 'Just now' 
+            }
+          ]
+        });
+      } else {
+        // Ensure Cufy Official is always at top or updated
+        const [off] = saved.splice(officialIdx, 1);
+        saved.unshift(off);
       }
+
+      try { localStorage.setItem('cufy_conversations', JSON.stringify(saved)); } catch (e) {}
       return saved;
     } catch (e) {
-      return [];
+      return [{
+        id: 'cufy_official',
+        name: 'Cufy Official ⚡',
+        photo: '/photos/cufylogo.jpg',
+        lastMessage: 'Welcome to Cufy! Official announcements, boost approvals & updates appear here.',
+        time: 'Just now',
+        unread: false,
+        badge: 'Official',
+        isOfficial: true,
+        messages: [
+          { 
+            id: 1, 
+            sender: 'them', 
+            text: 'Welcome to Cufy! 🎉 Explore authentic profiles and connect. All platform announcements, profile boost approvals, and important notices will be sent right here.', 
+            time: 'Just now' 
+          }
+        ]
+      }];
     }
   });
 
@@ -147,10 +176,13 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile }) {
     setIsTyping(true);
     setTimeout(() => {
       setIsTyping(false);
+      const isOfficial = activeThreadId === 'cufy_official';
       const replyMsg = {
         id: Date.now() + 1,
         sender: 'them',
-        text: 'That sounds fantastic! Let us meet up this Saturday.',
+        text: isOfficial 
+          ? 'Thanks for reaching out! ⚡ Our support & admin team monitors this channel. Boost approvals & official announcements will be delivered here.'
+          : 'That sounds fantastic! Let us meet up this Saturday.',
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       setConversations(prev => {
