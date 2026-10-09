@@ -26,7 +26,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
   const [showGoogleEmailModal, setShowGoogleEmailModal] = useState(false);
 
   const [googleClientId] = useState(() => {
-    return ENV.GOOGLE_CLIENT_ID || (typeof localStorage !== 'undefined' ? (localStorage.getItem('cufy_google_client_id') || '') : '') || '';
+    return ENV.GOOGLE_CLIENT_ID || (typeof localStorage !== 'undefined' ? (localStorage.getItem('cufy_google_client_id') || '') : '') || '908885680379-epsk9cga656h54t6t638ihbd5mig9t77.apps.googleusercontent.com';
   });
   
   const [googleEmailInput, setGoogleEmailInput] = useState('');
@@ -234,14 +234,18 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
       }
     }
 
-    // 2. Secondary: Supabase Auth Provider Google OAuth (Now active & enabled in Supabase!)
+    // 2. Secondary: Supabase Auth Provider Google OAuth (with safe redirect URL check)
     if (supabase && supabase.auth) {
       try {
+        const redirectUrl = (typeof window !== 'undefined' && window.location.origin && !window.location.origin.includes('localhost'))
+          ? window.location.origin
+          : 'https://cufy-in.vercel.app';
+
         const { error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
             queryParams: { prompt: 'select_account' },
-            redirectTo: window.location.origin
+            redirectTo: redirectUrl
           }
         });
         if (!error) return;
