@@ -207,6 +207,21 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
         const client = window.google.accounts.oauth2.initTokenClient({
           client_id: googleClientId,
           scope: 'email profile openid',
+          error_callback: (err) => {
+            console.warn('GIS Token client origin/auth error:', err);
+            setIsGoogleLoading(false);
+            if (supabase && supabase.auth) {
+              const redirectUrl = (typeof window !== 'undefined' && window.location.origin && !window.location.origin.includes('localhost'))
+                ? window.location.origin
+                : 'https://cufy-in.vercel.app';
+              supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: { queryParams: { prompt: 'select_account' }, redirectTo: redirectUrl }
+              }).catch(() => setShowGoogleEmailModal(true));
+            } else {
+              setShowGoogleEmailModal(true);
+            }
+          },
           callback: async (tokenRes) => {
             setIsGoogleLoading(false);
             if (tokenRes?.access_token) {
@@ -224,6 +239,8 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
               } catch (fetchErr) {
                 console.error('Failed to fetch Google profile:', fetchErr);
               }
+            } else if (tokenRes?.error) {
+              console.warn('Token error:', tokenRes.error);
             }
           }
         });
