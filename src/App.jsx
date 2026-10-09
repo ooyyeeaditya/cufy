@@ -130,8 +130,8 @@ export default function App() {
               .eq('email', cleanEmail)
               .maybeSingle();
 
-            // 1. If profile is missing or marked Deleted: user was permanently deleted by admin!
-            if (!dbProf || dbProf.account_status === 'Deleted' || (dbProf.prompt2_answer && dbProf.prompt2_answer.startsWith('[DELETED]')) || dbProf.name === '[Deleted Account]') {
+            // 1. If profile is marked Deleted by admin
+            if (dbProf && (dbProf.account_status === 'Deleted' || (dbProf.prompt2_answer && dbProf.prompt2_answer.startsWith('[DELETED]')) || dbProf.name === '[Deleted Account]')) {
               localStorage.removeItem('cufy_active_user');
               setUserProfile(null);
               setViewState('welcome');
@@ -331,7 +331,7 @@ export default function App() {
           .maybeSingle();
 
         // 1. Account was permanently deleted by admin
-        if (!dbProf || dbProf.account_status === 'Deleted' || (dbProf.prompt2_answer && dbProf.prompt2_answer.startsWith('[DELETED]')) || dbProf.name === '[Deleted Account]') {
+        if (dbProf && (dbProf.account_status === 'Deleted' || (dbProf.prompt2_answer && dbProf.prompt2_answer.startsWith('[DELETED]')) || dbProf.name === '[Deleted Account]')) {
           localStorage.removeItem('cufy_active_user');
           setUserProfile(null);
           setViewState('welcome');

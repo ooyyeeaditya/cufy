@@ -593,7 +593,14 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
               <p className="editorial-subtitle">Cufy uses your phone number to verify authentic members (Compulsory).</p>
 
               <div className="form-group" style={{ marginTop: '16px' }}>
-                <label className="form-label">Phone Number *</label>
+                <label className="form-label">
+                  Phone Number *
+                  {Boolean(initialData?.phone) && (
+                    <span style={{ fontSize: '0.74rem', color: '#16A34A', fontWeight: 700, marginLeft: '6px' }}>
+                      (Verified • Locked)
+                    </span>
+                  )}
+                </label>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <input 
                     type="text" 
@@ -606,11 +613,14 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
                     type="tel" 
                     value={formData.phone} 
                     onChange={(e) => {
+                      if (initialData?.phone) return;
                       setFormData({ ...formData, phone: e.target.value });
                       if (stepError) setStepError('');
                     }} 
+                    readOnly={Boolean(initialData?.phone)}
                     placeholder="98765 43210"
                     className="form-input"
+                    style={initialData?.phone ? { backgroundColor: '#F4F4F5', cursor: 'not-allowed', color: '#52525B', borderColor: '#E4E4E7' } : {}}
                     maxLength={15}
                     required
                   />
