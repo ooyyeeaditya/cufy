@@ -19,13 +19,13 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
   const [isUploadingBoostProof, setIsUploadingBoostProof] = useState(false);
 
   const [profileData, setProfileData] = useState({
-    name: userProfile?.name || 'Aditya',
+    name: userProfile?.name || '',
     gender: userProfile?.gender || 'Man',
     bio: userProfile?.bio || '',
     promptQuestion: userProfile?.promptQuestion || 'Ideal Sunday Morning',
     promptAnswer: userProfile?.promptAnswer || '',
-    height: userProfile?.height || "178 cm (5'10\")",
-    city: userProfile?.city || 'Greater Noida',
+    height: userProfile?.height || '',
+    city: userProfile?.city || '',
     occupation: userProfile?.occupation || userProfile?.jobTitle || '',
     education: userProfile?.education || '',
     religion: userProfile?.religion || '',
@@ -35,51 +35,59 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
   // Keep internal profile state synced with external userProfile prop
   useEffect(() => {
     if (userProfile) {
-      setProfileData(prev => ({
-        ...prev,
-        name: userProfile.name || prev.name,
-        gender: userProfile.gender || prev.gender,
-        bio: userProfile.bio !== undefined ? userProfile.bio : prev.bio,
-        promptQuestion: userProfile.promptQuestion || prev.promptQuestion,
-        promptAnswer: userProfile.promptAnswer !== undefined ? userProfile.promptAnswer : prev.promptAnswer,
-        height: userProfile.height || prev.height,
-        city: userProfile.city || prev.city,
-        occupation: userProfile.occupation || userProfile.jobTitle || prev.occupation,
-        education: userProfile.education || prev.education,
-        religion: userProfile.religion || prev.religion,
-        photos: (userProfile.photos && userProfile.photos.length > 0) ? userProfile.photos : prev.photos
-      }));
+      setProfileData({
+        name: userProfile.name || '',
+        gender: userProfile.gender || 'Man',
+        bio: userProfile.bio || '',
+        promptQuestion: userProfile.promptQuestion || 'Ideal Sunday Morning',
+        promptAnswer: userProfile.promptAnswer || '',
+        height: userProfile.height || '',
+        city: userProfile.city || '',
+        occupation: userProfile.occupation || userProfile.jobTitle || '',
+        education: userProfile.education || '',
+        religion: userProfile.religion || '',
+        photos: (userProfile.photos && userProfile.photos.length > 0) ? userProfile.photos : (userProfile?.photo ? [userProfile.photo] : [])
+      });
     }
   }, [userProfile]);
 
   // Calculate dynamic profile completion percentage based on filled profile fields
   const calculateProfileScore = (data) => {
-    if (!data) return 15;
+    if (!data) return 20;
     let score = 0;
     
     // Name (10%)
     if (data.name && data.name.trim().length > 0) score += 10;
     
-    // Bio (25%) - length dependent
-    if (data.bio && data.bio.trim().length > 15) score += 25;
-    else if (data.bio && data.bio.trim().length > 0) score += 12;
+    // Gender (5%)
+    if (data.gender) score += 5;
     
-    // Prompt & Answer (20%)
-    if (data.promptAnswer && data.promptAnswer.trim().length > 5) score += 20;
-    else if (data.promptAnswer && data.promptAnswer.trim().length > 0) score += 10;
+    // Photos (30% max: 15% for main DP + 5% per additional photo up to 3 extra photos)
+    const validPhotos = (data.photos || []).filter(p => Boolean(p) && typeof p === 'string' && p.trim().length > 0);
+    if (validPhotos.length >= 1) {
+      score += 15;
+      score += Math.min(15, (validPhotos.length - 1) * 5);
+    }
+    
+    // Bio (20% max)
+    if (data.bio && data.bio.trim().length >= 15) score += 20;
+    else if (data.bio && data.bio.trim().length > 0) score += 10;
+    
+    // Prompt Answer (15% max)
+    if (data.promptAnswer && data.promptAnswer.trim().length >= 5) score += 15;
+    else if (data.promptAnswer && data.promptAnswer.trim().length > 0) score += 8;
     
     // City (10%)
     if (data.city && data.city.trim().length > 0) score += 10;
     
-    // Occupation/Job (10%)
-    if ((data.occupation && data.occupation.trim().length > 0) || (data.jobTitle && data.jobTitle.trim().length > 0)) score += 10;
-    
-    // Education (10%)
-    if (data.education && data.education.trim().length > 0) score += 10;
-    
-    // Photos (up to 15% max - 5% per photo up to 3 photos)
-    const validPhotos = (data.photos || []).filter(p => Boolean(p) && typeof p === 'string' && p.trim().length > 0);
-    score += Math.min(15, validPhotos.length * 5);
+    // Personal Details (Occupation, Education, Height, Religion) (10% max)
+    let detailsCount = 0;
+    if ((data.occupation && data.occupation.trim().length > 0) || (data.jobTitle && data.jobTitle.trim().length > 0)) detailsCount++;
+    if (data.education && data.education.trim().length > 0) detailsCount++;
+    if (data.height && data.height.trim().length > 0) detailsCount++;
+    if (data.religion && data.religion.trim().length > 0) detailsCount++;
+    if (detailsCount >= 2) score += 10;
+    else if (detailsCount === 1) score += 5;
 
     return Math.min(100, Math.max(15, score));
   };
@@ -184,12 +192,12 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <h1 style={{ fontSize: '1.9rem', fontWeight: 900, color: '#09090B', letterSpacing: '-0.8px', margin: 0 }}>
-                {profileData.name.toLowerCase()}
+                {(profileData.name || userProfile?.name || 'Member').toLowerCase()}
               </h1>
             </div>
             <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#71717A', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
               <span style={{ fontWeight: 800, color: '#09090B' }}>
-                {userProfile?.gender === 'Woman' ? 'Cufy VIP' : (userProfile?.plan || 'VIP Pass')}
+                {userProfile?.gender === 'Woman' ? 'Lifetime VIP Pass' : (userProfile?.plan || '1 Month VIP Pass')}
               </span>
               <span style={{ color: '#D4D4D8' }}>•</span>
               <span style={{ color: '#09090B', fontWeight: 800 }}>Active Member</span>

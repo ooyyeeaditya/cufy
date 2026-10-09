@@ -3,33 +3,36 @@ import { supabase } from './supabase';
 const REST_CLOUD_API = 'https://api.restful-api.dev/objects';
 
 // Helper: Get plan duration in days
-export function getPlanDurationDays(plan) {
+export function getPlanDurationDays(plan, gender) {
+  if (gender === 'Woman') return 99999;
   if (!plan) return 30;
   const p = plan.toString().toLowerCase();
+  if (p.includes('women') || p.includes('woman') || p.includes('free') || p.includes('lifetime')) return 99999;
   if (p.includes('1_day') || p.includes('1 day') || p.includes('day_199')) return 1;
   if (p.includes('1_week') || p.includes('1 week') || p.includes('week_299')) return 7;
   if (p.includes('15_days') || p.includes('15 days') || p.includes('days15_499') || p.includes('15_day')) return 15;
   if (p.includes('1_month') || p.includes('1 month') || p.includes('month_799') || p.includes('vip') || p.includes('month')) return 30;
-  if (p.includes('women') || p.includes('free')) return 365;
   return 30;
 }
 
 // Helper: Format readable plan name
-export function formatPlanName(plan) {
+export function formatPlanName(plan, gender) {
+  if (gender === 'Woman') return 'Lifetime VIP Pass';
   if (!plan) return '1 Month VIP Pass';
   const p = plan.toString().toLowerCase();
+  if (p.includes('women') || p.includes('woman') || p.includes('free') || p.includes('lifetime')) return 'Lifetime VIP Pass';
   if (p.includes('1_day') || p.includes('1 day') || p.includes('day_199')) return '1 Day Pass';
   if (p.includes('1_week') || p.includes('1 week') || p.includes('week_299')) return '1 Week Pass';
   if (p.includes('15_days') || p.includes('15 days') || p.includes('days15_499')) return '15 Days Pass';
   if (p.includes('1_month') || p.includes('1 month') || p.includes('month_799') || p.includes('vip')) return '1 Month VIP Pass';
-  if (p.includes('women') || p.includes('free')) return 'Cufy VIP';
   return plan;
 }
 
 // Helper: Minimal simplified plan badge for spacious clean UI (e.g. ₹799 Plan)
 export function getSimplifiedPlanBadge(plan, amount, gender) {
-  if (gender === 'Woman') return 'Free (Women)';
+  if (gender === 'Woman') return 'Lifetime VIP (Free)';
   const p = (plan || '').toString().toLowerCase();
+  if (p.includes('women') || p.includes('woman') || p.includes('free') || p.includes('lifetime')) return 'Lifetime VIP (Free)';
   if (p.includes('799') || p.includes('month') || p.includes('vip')) return '₹799 Plan';
   if (p.includes('499') || p.includes('15')) return '₹499 Plan';
   if (p.includes('299') || p.includes('week')) return '₹299 Plan';
@@ -76,8 +79,8 @@ export async function syncUserToCloud(record) {
   const rawEmail = (record.email || '').toLowerCase().trim();
   if (!rawEmail) return;
   const userEmail = sanitizeEmail(rawEmail);
-  const planDays = record.planDays || getPlanDurationDays(record.plan);
-  const planName = formatPlanName(record.plan || (record.gender === 'Woman' ? 'Free Pass for Women' : '1 Month VIP Pass'));
+  const planDays = record.planDays || getPlanDurationDays(record.plan, record.gender);
+  const planName = formatPlanName(record.plan || (record.gender === 'Woman' ? 'Lifetime VIP Pass' : '1 Month VIP Pass'), record.gender);
 
   const syncPayload = {
     id: record.id || `usr_${Date.now()}`,

@@ -72,8 +72,8 @@ export default function App() {
         city: user.city || 'Greater Noida',
         email: userEmail,
         phone: user.phone || '+91 9876543210',
-        status: user.status || 'pending_approval',
-        plan: user.plan || (user.gender === 'Woman' ? 'Free Pass for Women' : '1 Month VIP Pass'),
+        status: user.status || (user.gender === 'Woman' ? 'approved' : 'pending_approval'),
+        plan: user.plan ? formatPlanName(user.plan, user.gender) : (user.gender === 'Woman' ? 'Lifetime VIP Pass' : '1 Month VIP Pass'),
         registered: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
         photos: (user.photos && Array.isArray(user.photos) && user.photos.filter(Boolean).length > 0) ? user.photos.filter(Boolean) : (user.photo ? [user.photo] : []),
         boostCredits: user.boostCredits !== undefined ? user.boostCredits : (user.plan?.includes('799') || user.plan?.includes('month') || user.plan?.includes('VIP') ? 1 : 0),
@@ -623,7 +623,7 @@ export default function App() {
             is_verified: isVerified,
             startsAt: mem?.starts_at || null,
             expiresAt: mem?.expires_at || null,
-            plan: mem?.plan_type ? formatPlanName(mem.plan_type) : (dbProfile.gender === 'Woman' ? 'Free Pass for Women' : '1 Month VIP Pass'),
+            plan: dbProfile.gender === 'Woman' ? 'Lifetime VIP Pass' : (mem?.plan_type ? formatPlanName(mem.plan_type, dbProfile.gender) : '1 Month VIP Pass'),
             photos: dbProfile.photos && dbProfile.photos.length > 0 ? dbProfile.photos : [],
             registered: dbProfile.created_at ? new Date(dbProfile.created_at).toLocaleDateString() : 'Today'
           };

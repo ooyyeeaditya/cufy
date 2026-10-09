@@ -508,7 +508,7 @@ export default function VerificationRejectedModal({
               color: '#DB2777',
               fontWeight: 600
             }}>
-              <b>Free Pass for Women:</b> Membership is 100% free for women on Cufy. No payment receipt is required. Please update your profile photos above so we can verify your profile.
+              <b>Lifetime VIP Pass for Women:</b> Membership is 100% free with lifetime VIP access for women on Cufy. No payment receipt is required. Please update your profile photos above so we can verify your profile.
             </div>
           )}
 

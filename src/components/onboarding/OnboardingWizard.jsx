@@ -308,12 +308,12 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
       setIsProcessingPayment(false);
       setPaymentSuccess(true);
       setTimeout(() => {
-        const planDays = formData.gender === 'Woman' ? 365 : (selectedPlan.id === 'day_199' ? 1 : selectedPlan.id === 'week_299' ? 7 : selectedPlan.id === 'days15_499' ? 15 : 30);
+        const planDays = formData.gender === 'Woman' ? 99999 : (selectedPlan.id === 'day_199' ? 1 : selectedPlan.id === 'week_299' ? 7 : selectedPlan.id === 'days15_499' ? 15 : 30);
         const completedData = {
           ...formData,
           photos: formData.photos.filter(p => Boolean(p) && typeof p === 'string' && p.length > 20),
-          plan: formData.gender === 'Woman' ? 'Free Pass for Women' : selectedPlan.title,
-          planId: formData.gender === 'Woman' ? 'free_women' : selectedPlan.id,
+          plan: formData.gender === 'Woman' ? 'Lifetime VIP Pass' : selectedPlan.title,
+          planId: formData.gender === 'Woman' ? 'lifetime_women' : selectedPlan.id,
           planPrice: formData.gender === 'Woman' ? 0 : selectedPlan.price,
           planDays: planDays,
           paymentProofUrl: formData.gender === 'Woman' ? null : paymentProofUrl,
@@ -1524,7 +1524,7 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
                   <div>
                     <div style={{ fontSize: '0.68rem', color: '#8C7A77', textTransform: 'uppercase' }}>SELECTED PLAN</div>
                     <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#2B2625' }}>
-                      {formData.gender === 'Woman' && selectedPlan.type === 'membership' ? 'Free Pass for Women' : selectedPlan.title}
+                      {formData.gender === 'Woman' && selectedPlan.type === 'membership' ? 'Lifetime VIP Pass' : selectedPlan.title}
                     </div>
                   </div>
                   <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#FF3B30' }}>
@@ -1594,10 +1594,10 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
                   onClick={() => onCompleteOnboarding({
                     ...formData,
                     photos: formData.photos.filter(p => Boolean(p) && typeof p === 'string' && p.length > 20),
-                    plan: 'Free Pass for Women',
-                    planId: 'free_women',
+                    plan: 'Lifetime VIP Pass',
+                    planId: 'lifetime_women',
                     planPrice: 0,
-                    planDays: 365,
+                    planDays: 99999,
                     paymentProofUrl: null,
                     voiceNoteUrl: formData.voiceNoteUrl || null,
                     status: 'approved'

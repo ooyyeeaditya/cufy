@@ -339,8 +339,8 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
             userPhone: u.phone || '+91 9876543210',
             gender: u.gender || 'Man',
             pronouns: u.pronouns || '',
-            planName: u.plan || (u.gender === 'Woman' ? 'Free Pass for Women' : '1 Month VIP Pass'),
-            planDays: u.planDays || getPlanDurationDays(u.plan),
+            planName: formatPlanName(u.plan, u.gender),
+            planDays: u.planDays || getPlanDurationDays(u.plan, u.gender),
             planPrice: u.planPrice || (u.gender === 'Woman' ? 0 : 799),
             startsAt: u.startsAt,
             expiresAt: u.expiresAt,
@@ -2662,7 +2662,7 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
 
                   {selectedProfileUser.gender === 'Woman' ? (
                     <div style={{ padding: '10px 12px', background: '#FDF2F8', border: '1px solid #FBCFE8', borderRadius: '12px', color: '#DB2777', fontSize: '0.76rem', fontWeight: 800 }}>
-                      ✓ Free Pass for Women (No payment proof required)
+                      ✓ Lifetime VIP Pass for Women (No payment required)
                     </div>
                   ) : (selectedProfileUser.screenshotUrl && !selectedProfileUser.screenshotUrl.includes('unsplash.com')) ? (
                     <div>

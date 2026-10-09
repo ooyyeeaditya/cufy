@@ -6,16 +6,16 @@ import { fileToCompressedBase64 } from '../../utils/imageUpload';
 export default function EditProfileModal({ isOpen, onClose, userProfile, onSave }) {
   if (!isOpen) return null;
 
-  const [name, setName] = useState(userProfile?.name || 'Aditya');
+  const [name, setName] = useState(userProfile?.name || '');
   const [gender] = useState(userProfile?.gender || 'Man'); // Read-only & locked!
-  const [bio, setBio] = useState(userProfile?.bio || 'Architecture enthusiast, sourdough baker, and lover of spontaneous getaways.');
+  const [bio, setBio] = useState(userProfile?.bio || '');
   const [promptQuestion, setPromptQuestion] = useState(userProfile?.promptQuestion || 'Ideal Sunday Morning');
-  const [promptAnswer, setPromptAnswer] = useState(userProfile?.promptAnswer || 'Fresh pour-over coffee, listening to vinyl records, and long walk in the park.');
-  const [height, setHeight] = useState(userProfile?.height || "178 cm (5'10\")");
-  const [city, setCity] = useState(userProfile?.city || 'Greater Noida');
-  const [occupation, setOccupation] = useState(userProfile?.occupation || userProfile?.jobTitle || 'Product Designer');
-  const [education, setEducation] = useState(userProfile?.education || 'Bachelor');
-  const [religion, setReligion] = useState(userProfile?.religion || 'Agnostic');
+  const [promptAnswer, setPromptAnswer] = useState(userProfile?.promptAnswer || '');
+  const [height, setHeight] = useState(userProfile?.height || '');
+  const [city, setCity] = useState(userProfile?.city || '');
+  const [occupation, setOccupation] = useState(userProfile?.occupation || userProfile?.jobTitle || '');
+  const [education, setEducation] = useState(userProfile?.education || '');
+  const [religion, setReligion] = useState(userProfile?.religion || '');
 
   const userPhotoList = Array.isArray(userProfile?.photos) 
     ? userProfile.photos.filter(Boolean) 
@@ -32,6 +32,34 @@ export default function EditProfileModal({ isOpen, onClose, userProfile, onSave 
 
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
   const [voiceDuration, setVoiceDuration] = useState('0:14');
+
+  // Keep modal state updated with real userProfile data
+  React.useEffect(() => {
+    if (userProfile && isOpen) {
+      setName(userProfile.name || '');
+      setBio(userProfile.bio || '');
+      setPromptQuestion(userProfile.promptQuestion || 'Ideal Sunday Morning');
+      setPromptAnswer(userProfile.promptAnswer || '');
+      setHeight(userProfile.height || '');
+      setCity(userProfile.city || '');
+      setOccupation(userProfile.occupation || userProfile.jobTitle || '');
+      setEducation(userProfile.education || '');
+      setReligion(userProfile.religion || '');
+
+      const pList = Array.isArray(userProfile.photos) 
+        ? userProfile.photos.filter(Boolean) 
+        : (userProfile.photo ? [userProfile.photo] : []);
+
+      setPhotos([
+        pList[0] || '',
+        pList[1] || '',
+        pList[2] || '',
+        pList[3] || '',
+        pList[4] || '',
+        pList[5] || ''
+      ]);
+    }
+  }, [userProfile, isOpen]);
 
   const handlePhotoUpload = async (index, event) => {
     const file = event.target.files?.[0];
