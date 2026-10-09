@@ -1202,10 +1202,10 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                  background: uploadedCount >= 2 ? '#ECFDF5' : '#FEF2F2',
-                  border: uploadedCount >= 2 ? '1px solid #A7F3D0' : '1px solid #FECACA',
-                  color: uploadedCount >= 2 ? '#065F46' : '#DC2626',
-                  padding: '5px 14px',
+                  background: uploadedCount >= 2 ? '#FFF5F2' : '#FFF0F0',
+                  border: uploadedCount >= 2 ? '1px solid #FFCFC0' : '1px solid #FFE0E0',
+                  color: uploadedCount >= 2 ? '#D9381E' : '#C53030',
+                  padding: '6px 16px',
                   borderRadius: '999px',
                   fontSize: '0.78rem',
                   fontWeight: 800,
@@ -1235,8 +1235,8 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
                           overflow: 'hidden',
                           position: 'relative',
                           background: '#FFFFFF',
-                          border: hasPhoto ? '2px solid #FF3B30' : (idx < 2 && uploadedCount < 2) ? '2px dashed #F87171' : '2px dashed #D4D4D8',
-                          boxShadow: hasPhoto ? '0 6px 20px rgba(255,59,48,0.18)' : '0 4px 14px rgba(0,0,0,0.02)',
+                          border: hasPhoto ? (idx === 0 ? '2px solid #FF5A43' : '1px solid #E4E4E7') : (idx < 2 && uploadedCount < 2) ? '2px dashed #FF8A7A' : '2px dashed #D4D4D8',
+                          boxShadow: hasPhoto ? '0 6px 18px rgba(0,0,0,0.06)' : '0 2px 8px rgba(0,0,0,0.02)',
                           display: 'flex',
                           flexDirection: 'column',
                           alignItems: 'center',
@@ -1247,6 +1247,20 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
                       >
                         {hasPhoto ? (
                           <>
+                            {idx === 0 && (
+                              <span style={{
+                                position: 'absolute',
+                                top: '8px',
+                                left: '8px',
+                                background: '#FF5A43',
+                                color: '#FFFFFF',
+                                fontSize: '0.65rem',
+                                fontWeight: 800,
+                                padding: '3px 8px',
+                                borderRadius: '8px',
+                                zIndex: 2
+                              }}>Main DP</span>
+                            )}
                             <img src={photoUrl} alt={`User uploaded photo ${idx+1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             <button 
                               type="button"
@@ -1445,27 +1459,6 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
                   setFormData(prev => ({ ...prev, voiceNoteUrl: null, voiceRecorded: false }));
                 }}
               />
-
-              <div style={{ textAlign: 'center', marginTop: '12px' }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStepError('');
-                    setStep(prev => prev + 1);
-                  }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#71717A',
-                    fontSize: '0.82rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    textDecoration: 'underline'
-                  }}
-                >
-                  I'll do this later, skip to next step →
-                </button>
-              </div>
             </div>
           )}
 
@@ -1473,42 +1466,43 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
           {step === 19 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               
-              {/* VIP Member Card */}
+              {/* VIP Member Card - Warm Premium Theme */}
               <div style={{
-                background: 'linear-gradient(135deg, #18181B 0%, #09090B 100%)',
-                color: '#FFFFFF',
+                background: 'linear-gradient(135deg, #FFF8F6 0%, #FFEFEA 100%)',
+                color: '#2B2625',
                 borderRadius: '24px',
                 padding: '20px 24px',
-                boxShadow: '0 20px 40px rgba(0,0,0,0.22)',
+                boxShadow: '0 12px 32px rgba(255, 90, 67, 0.08)',
                 position: 'relative',
-                border: '1px solid rgba(255,255,255,0.15)'
+                border: '1.5px solid #FFD8CC'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                  <div style={{ color: '#F59E0B', fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase' }}>
+                  <div style={{ color: '#E0533C', fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     {formData.gender === 'Woman' ? 'WOMEN FREE VIP PASS' : 'CUFY VIP ACCESS'}
                   </div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 900, fontFamily: 'serif', fontStyle: 'italic' }}>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 900, fontFamily: 'serif', fontStyle: 'italic', color: '#2B2625' }}>
                     cufy<span style={{ color: '#FF3B30', fontStyle: 'normal' }}>.</span>
                   </div>
                 </div>
 
                 {formData.gender === 'Woman' ? (
                   <div style={{
-                    background: 'rgba(16, 185, 129, 0.15)',
-                    border: '1px solid #10B981',
+                    background: '#FFF0EC',
+                    border: '1px solid #FFCFC0',
                     padding: '12px 16px',
                     borderRadius: '16px',
                     marginBottom: '16px',
-                    color: '#10B981',
+                    color: '#D9381E',
                     fontSize: '0.9rem',
                     fontWeight: 800,
                     textAlign: 'center'
                   }}>
-                    ✨ Unlimited Free Membership for All Women!
+                    Unlimited Free Membership for All Women!
                   </div>
                 ) : (
                   <div style={{
-                    background: 'rgba(255,255,255,0.08)',
+                    background: '#FFFFFF',
+                    border: '1px solid #FFE0D8',
                     padding: '12px 16px',
                     borderRadius: '16px',
                     marginBottom: '16px',
@@ -1517,10 +1511,10 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
                     justifyContent: 'space-between'
                   }}>
                     <div>
-                      <div style={{ fontSize: '0.68rem', color: '#A1A1AA', textTransform: 'uppercase' }}>UPI PAY ID</div>
-                      <div style={{ fontSize: '1rem', fontWeight: 800, color: '#FFFFFF', fontFamily: 'monospace' }}>aditya.378@superyes</div>
+                      <div style={{ fontSize: '0.68rem', color: '#8C7A77', textTransform: 'uppercase' }}>UPI PAY ID</div>
+                      <div style={{ fontSize: '1rem', fontWeight: 800, color: '#2B2625', fontFamily: 'monospace' }}>aditya.378@superyes</div>
                     </div>
-                    <button onClick={copyUpiId} style={{ padding: '6px 12px', background: '#FF3B30', color: '#FFFFFF', borderRadius: '10px', fontSize: '0.8rem', fontWeight: 800 }}>
+                    <button onClick={copyUpiId} style={{ padding: '6px 14px', background: '#FF3B30', color: '#FFFFFF', borderRadius: '10px', fontSize: '0.8rem', fontWeight: 800, border: 'none', cursor: 'pointer' }}>
                       {upiCopied ? 'Copied!' : 'Copy'}
                     </button>
                   </div>
@@ -1528,8 +1522,8 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                   <div>
-                    <div style={{ fontSize: '0.68rem', color: '#A1A1AA', textTransform: 'uppercase' }}>SELECTED PLAN</div>
-                    <div style={{ fontSize: '0.95rem', fontWeight: 800 }}>
+                    <div style={{ fontSize: '0.68rem', color: '#8C7A77', textTransform: 'uppercase' }}>SELECTED PLAN</div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#2B2625' }}>
                       {formData.gender === 'Woman' && selectedPlan.type === 'membership' ? 'Free Pass for Women' : selectedPlan.title}
                     </div>
                   </div>
@@ -1541,7 +1535,7 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
 
               {/* Membership Pricing Options (For Men) vs Free Badge (For Women) */}
               {formData.gender === 'Woman' ? (
-                <div style={{ background: '#ECFDF5', border: '1.5px solid #A7F3D0', padding: '16px', borderRadius: '20px', color: '#065F46' }}>
+                <div style={{ background: '#FFF8F5', border: '1.5px solid #FFDCD2', padding: '16px', borderRadius: '20px', color: '#8A2B1E' }}>
                   <div style={{ fontSize: '0.95rem', fontWeight: 800 }}>Women Membership is Always Free!</div>
                   <div style={{ fontSize: '0.82rem', marginTop: '4px', opacity: 0.9 }}>
                     No subscription needed. You can optionally purchase Profile Boosts below to get featured at the top.

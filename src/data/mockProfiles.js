@@ -226,13 +226,16 @@ export function formatProfileForFeed(p) {
     ? p.height 
     : (p.heightFeet ? `${p.heightFeet}'${p.heightInches || 0}"` : (isWoman ? `5'5"` : `5'11"`));
 
-  const promptQ = p.promptQuestion || p.prompt1 || (isWoman ? 'Ideal Sunday Morning' : 'I will know I found the one when');
-  const promptA = p.promptAnswer || p.prompt1_answer || p.bio || (isWoman ? 'Matcha latte, vinyl records & quiet rain' : 'We can laugh endlessly over silly jokes');
+  const prompt1Q = p.prompt1 || p.promptQuestion || (isWoman ? 'Together, we could...' : 'My simple pleasure is...');
+  const prompt1A = p.prompt1Answer || p.prompt1_answer || p.promptAnswer || '';
+
+  const prompt2Q = p.prompt2 || (isWoman ? 'I get along best with people who...' : 'A non-negotiable for me is...');
+  const prompt2A = p.prompt2Answer || p.prompt2_answer || '';
 
   const voice = p.voiceNote || (p.voiceNoteUrl || p.voice_note_url ? {
     title: 'Voice Note',
     prompt: 'Listen to audio intro',
-    duration: '0:18',
+    duration: '0:15',
     audioUrl: p.voiceNoteUrl || p.voice_note_url
   } : null);
 
@@ -250,11 +253,20 @@ export function formatProfileForFeed(p) {
     intents: intentsList,
     photos: cleanPhotos,
     voiceNote: voice,
-    bio: p.bio || promptA,
-    promptQuestion: promptQ,
-    promptAnswer: promptA,
+    bio: p.bio || '',
+    prompt1: prompt1Q,
+    prompt1Answer: prompt1A,
+    prompt2: prompt2Q,
+    prompt2Answer: prompt2A,
+    promptQuestion: prompt1Q,
+    promptAnswer: prompt1A,
     distance: p.distance || '4 km away',
     zodiac: p.zodiac || p.religion || 'Spiritual',
+    religion: p.religion || 'Spiritual',
+    drinking: p.drinking || 'Socially',
+    smoking: p.smoking || 'Never',
+    hometown: p.hometown || '',
+    jobTitle: p.jobTitle || p.job_title || '',
     height: heightStr,
     education: p.education || p.college || 'University',
     email: p.email,

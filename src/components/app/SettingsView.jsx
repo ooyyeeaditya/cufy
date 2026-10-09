@@ -794,7 +794,7 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
               <Camera size={20} style={{ color: '#FF3B30', margin: '0 auto 4px' }} />
               <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#09090B' }}>Upload Payment Screenshot</span>
               <input type="file" accept="image/*" style={{ display: 'none' }} onChange={() => {
-                showToast('✨ Membership Screenshot sent! Admin will verify and activate.');
+                showToast('Membership Screenshot sent! Admin will verify and activate.');
                 setIsPremiumModalOpen(false);
               }} />
             </label>

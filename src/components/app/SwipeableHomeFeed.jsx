@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Heart, X, Star, Zap, Sliders, Bell, Home, MapPin, Compass, GraduationCap, Award, RefreshCw, Mic, Play, Pause, Volume2, Camera, Check } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Heart, X, Star, Zap, Sliders, Bell, Home, MapPin, Compass, GraduationCap, Award, RefreshCw, Mic, Play, Pause, Volume2, Camera, Check, Briefcase, Wine, Cigarette, Info } from 'lucide-react';
 import { getProfilesForUser, HOME_SWIPE_PROFILES } from '../../data/mockProfiles';
 import { fetchAllCloudUsers } from '../../lib/cloudSync';
 import { fileToCompressedBase64 } from '../../utils/imageUpload';
@@ -19,6 +19,35 @@ export default function SwipeableHomeFeed({
   const [isLoadingDeck, setIsLoadingDeck] = useState(false);
   const [glideClass, setGlideClass] = useState('');
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
+  const audioRef = useRef(null);
+
+  const handleToggleVoice = (audioUrl) => {
+    if (!audioUrl) return;
+    if (isPlayingVoice) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      setIsPlayingVoice(false);
+    } else {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      const audio = new Audio(audioUrl);
+      audioRef.current = audio;
+      audio.onended = () => setIsPlayingVoice(false);
+      audio.onerror = (err) => {
+        console.warn('Audio play error:', err);
+        setIsPlayingVoice(false);
+      };
+      audio.play()
+        .then(() => setIsPlayingVoice(true))
+        .catch((err) => {
+          console.warn('Audio play failed:', err);
+          setIsPlayingVoice(false);
+        });
+    }
+  };
 
   // Boost States & Flow
   const [showBoostConfirmModal, setShowBoostConfirmModal] = useState(false);
@@ -335,7 +364,7 @@ export default function SwipeableHomeFeed({
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1 }}>
                   <button 
-                    onClick={() => setIsPlayingVoice(!isPlayingVoice)}
+                    onClick={() => handleToggleVoice(currentProfile.voiceNote.audioUrl || currentProfile.voiceNoteUrl || currentProfile.voice_note_url)}
                     style={{
                       width: '48px',
                       height: '48px',
@@ -347,6 +376,8 @@ export default function SwipeableHomeFeed({
                       justifyContent: 'center',
                       boxShadow: '0 6px 18px rgba(255, 59, 48, 0.3)',
                       flexShrink: 0,
+                      cursor: 'pointer',
+                      border: 'none',
                       transition: 'transform 0.2s var(--ease-spring)'
                     }}
                     aria-label={isPlayingVoice ? 'Pause voice note' : 'Play voice note'}
@@ -360,7 +391,7 @@ export default function SwipeableHomeFeed({
                       <span>{currentProfile.voiceNote.title || 'Voice Intro'}</span>
                     </div>
                     <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#09090B', marginTop: '2px' }}>
-                      "{currentProfile.voiceNote.prompt}"
+                      "{currentProfile.voiceNote.prompt || 'Listen to audio intro'}"
                     </div>
                     {/* Simulated Waveform Bars */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginTop: '8px' }}>
@@ -382,8 +413,96 @@ export default function SwipeableHomeFeed({
                 </div>
 
                 <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#71717A' }}>
-                  {currentProfile.voiceNote.duration || '0:14'}
+                  {currentProfile.voiceNote.duration || '0:15'}
                 </div>
+              </div>
+            )}
+
+            {/* BIO CARD */}
+            {currentProfile.bio && (
+              <div style={{
+                background: '#FFFFFF',
+                borderRadius: '24px',
+                padding: '22px 24px',
+                border: '1.5px solid #E4E4E7',
+                boxShadow: '0 6px 20px rgba(0,0,0,0.03)'
+              }}>
+                <div style={{ fontSize: '0.76rem', fontWeight: 800, color: '#71717A', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.5px' }}>
+                  About Me
+                </div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#09090B', lineHeight: '1.5' }}>
+                  {currentProfile.bio}
+                </div>
+              </div>
+            )}
+
+            {/* PROMPT 1 CARD */}
+            {(currentProfile.prompt1Answer || currentProfile.promptAnswer) && (
+              <div style={{
+                background: '#FFFFFF',
+                borderRadius: '24px',
+                padding: '24px',
+                border: '1.5px solid #E4E4E7',
+                boxShadow: '0 6px 20px rgba(0,0,0,0.03)'
+              }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#FF3B30', textTransform: 'uppercase', marginBottom: '6px' }}>
+                  {currentProfile.prompt1 || currentProfile.promptQuestion || 'Together, we could...'}
+                </div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#09090B', lineHeight: '1.35' }}>
+                  "{currentProfile.prompt1Answer || currentProfile.promptAnswer}"
+                </div>
+              </div>
+            )}
+
+            {/* SECOND PROFILE PHOTO CARD */}
+            {currentProfile.photos[1] && (
+              <div style={{
+                height: '460px',
+                borderRadius: '28px',
+                overflow: 'hidden',
+                boxShadow: '0 12px 32px rgba(0,0,0,0.06)',
+                border: '1.5px solid #E4E4E7'
+              }}>
+                <img 
+                  src={currentProfile.photos[1]} 
+                  alt={`${currentProfile.name} secondary photo`}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              </div>
+            )}
+
+            {/* PROMPT 2 CARD */}
+            {currentProfile.prompt2Answer && (
+              <div style={{
+                background: '#FFFFFF',
+                borderRadius: '24px',
+                padding: '24px',
+                border: '1.5px solid #E4E4E7',
+                boxShadow: '0 6px 20px rgba(0,0,0,0.03)'
+              }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#FF3B30', textTransform: 'uppercase', marginBottom: '6px' }}>
+                  {currentProfile.prompt2 || 'I get along best with people who...'}
+                </div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#09090B', lineHeight: '1.35' }}>
+                  "{currentProfile.prompt2Answer}"
+                </div>
+              </div>
+            )}
+
+            {/* THIRD PROFILE PHOTO CARD */}
+            {currentProfile.photos[2] && (
+              <div style={{
+                height: '460px',
+                borderRadius: '28px',
+                overflow: 'hidden',
+                boxShadow: '0 12px 32px rgba(0,0,0,0.06)',
+                border: '1.5px solid #E4E4E7'
+              }}>
+                <img 
+                  src={currentProfile.photos[2]} 
+                  alt={`${currentProfile.name} photo 3`}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
               </div>
             )}
 
@@ -425,17 +544,26 @@ export default function SwipeableHomeFeed({
                 </span>
               </div>
 
+              {currentProfile.hometown && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', borderBottom: '1px solid #F4F4F5', paddingBottom: '14px' }}>
+                  <MapPin size={20} style={{ color: '#09090B' }} />
+                  <span style={{ fontSize: '0.98rem', fontWeight: 700, color: '#09090B' }}>
+                    From {currentProfile.hometown}
+                  </span>
+                </div>
+              )}
+
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px', borderBottom: '1px solid #F4F4F5', paddingBottom: '14px' }}>
-                <MapPin size={20} style={{ color: '#09090B' }} />
+                <Compass size={20} style={{ color: '#09090B' }} />
                 <span style={{ fontSize: '0.98rem', fontWeight: 700, color: '#09090B' }}>
-                  {currentProfile.distance || '0 mi away'}
+                  {currentProfile.distance || '4 km away'}
                 </span>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px', borderBottom: '1px solid #F4F4F5', paddingBottom: '14px' }}>
                 <Award size={20} style={{ color: '#09090B' }} />
                 <span style={{ fontSize: '0.98rem', fontWeight: 700, color: '#09090B' }}>
-                  {currentProfile.zodiac || 'Virgo'}
+                  {currentProfile.religion || currentProfile.zodiac || 'Spiritual'}
                 </span>
               </div>
 
@@ -446,17 +574,46 @@ export default function SwipeableHomeFeed({
                 </span>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                <GraduationCap size={20} style={{ color: '#09090B' }} />
-                <span style={{ fontSize: '0.98rem', fontWeight: 700, color: '#09090B' }}>
-                  {currentProfile.education || 'Master'}
-                </span>
-              </div>
+              {currentProfile.education && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', borderBottom: '1px solid #F4F4F5', paddingBottom: '14px' }}>
+                  <GraduationCap size={20} style={{ color: '#09090B' }} />
+                  <span style={{ fontSize: '0.98rem', fontWeight: 700, color: '#09090B' }}>
+                    {currentProfile.education}
+                  </span>
+                </div>
+              )}
+
+              {currentProfile.jobTitle && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', borderBottom: '1px solid #F4F4F5', paddingBottom: '14px' }}>
+                  <Briefcase size={20} style={{ color: '#09090B' }} />
+                  <span style={{ fontSize: '0.98rem', fontWeight: 700, color: '#09090B' }}>
+                    {currentProfile.jobTitle}
+                  </span>
+                </div>
+              )}
+
+              {currentProfile.drinking && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', borderBottom: '1px solid #F4F4F5', paddingBottom: '14px' }}>
+                  <Wine size={20} style={{ color: '#09090B' }} />
+                  <span style={{ fontSize: '0.98rem', fontWeight: 700, color: '#09090B' }}>
+                    Drinks: {currentProfile.drinking}
+                  </span>
+                </div>
+              )}
+
+              {currentProfile.smoking && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <Cigarette size={20} style={{ color: '#09090B' }} />
+                  <span style={{ fontSize: '0.98rem', fontWeight: 700, color: '#09090B' }}>
+                    Smoking: {currentProfile.smoking}
+                  </span>
+                </div>
+              )}
             </div>
 
-            {/* SECOND PROFILE PHOTO CARD */}
-            {currentProfile.photos[1] && (
-              <div style={{
+            {/* REMAINING PROFILE PHOTOS (4, 5, 6) */}
+            {currentProfile.photos.slice(3).map((photoUrl, pIdx) => (
+              <div key={pIdx} style={{
                 height: '460px',
                 borderRadius: '28px',
                 overflow: 'hidden',
@@ -464,28 +621,12 @@ export default function SwipeableHomeFeed({
                 border: '1.5px solid #E4E4E7'
               }}>
                 <img 
-                  src={currentProfile.photos[1]} 
-                  alt={`${currentProfile.name} secondary portrait`}
+                  src={photoUrl} 
+                  alt={`${currentProfile.name} photo ${pIdx + 4}`}
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
               </div>
-            )}
-
-            {/* BIO & PROMPT CARD */}
-            <div style={{
-              background: '#FFFFFF',
-              borderRadius: '24px',
-              padding: '24px',
-              border: '1.5px solid #E4E4E7',
-              boxShadow: '0 6px 20px rgba(0,0,0,0.03)'
-            }}>
-              <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#FF3B30', textTransform: 'uppercase', marginBottom: '6px' }}>
-                {currentProfile.promptQuestion || 'Ideal Sunday Morning'}
-              </div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#09090B', lineHeight: '1.3' }}>
-                "{currentProfile.promptAnswer || currentProfile.bio}"
-              </div>
-            </div>
+            ))}
 
           </div>
 

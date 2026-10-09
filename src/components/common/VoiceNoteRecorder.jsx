@@ -176,17 +176,26 @@ export default function VoiceNoteRecorder({
     if (!audioUrl) return;
 
     if (status === 'playing') {
-      if (audioElementRef.current) audioElementRef.current.pause();
+      if (audioElementRef.current) {
+        audioElementRef.current.pause();
+      }
       setStatus('recorded');
     } else {
-      if (!audioElementRef.current) {
-        audioElementRef.current = new Audio(audioUrl);
-        audioElementRef.current.onended = () => setStatus('recorded');
+      if (audioElementRef.current) {
+        audioElementRef.current.pause();
+        audioElementRef.current = null;
       }
-      audioElementRef.current.play()
+      const audio = new Audio(audioUrl);
+      audioElementRef.current = audio;
+      audio.onended = () => setStatus('recorded');
+      audio.onerror = (err) => {
+        console.warn('Audio playback error:', err);
+        setStatus('recorded');
+      };
+      audio.play()
         .then(() => setStatus('playing'))
         .catch((err) => {
-          console.warn('Audio play note:', err);
+          console.warn('Audio play failed:', err);
           setStatus('recorded');
         });
     }
@@ -330,11 +339,12 @@ export default function VoiceNoteRecorder({
             display: 'inline-flex',
             alignItems: 'center',
             gap: '6px',
-            background: '#ECFDF5',
-            color: '#065F46',
+            background: '#FFF5F2',
+            border: '1px solid #FFCFC0',
+            color: '#D9381E',
             padding: '6px 14px',
             borderRadius: '999px',
-            fontSize: '0.74rem',
+            fontSize: '0.76rem',
             fontWeight: 800,
             marginBottom: '16px'
           }}>
