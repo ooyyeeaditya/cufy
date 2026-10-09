@@ -119,7 +119,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
               age: dbProfile.age || 24,
               city: dbProfile.location || 'New Delhi',
               status: dbProfile.is_verified ? 'approved' : 'pending_approval',
-              photos: dbProfile.photos && dbProfile.photos.length > 0 ? dbProfile.photos : (photo ? [photo] : []),
+              photos: dbProfile.photos && dbProfile.photos.length > 0 ? dbProfile.photos : [],
               registered: dbProfile.created_at ? new Date(dbProfile.created_at).toLocaleDateString() : 'Today'
             };
             try {
@@ -136,13 +136,13 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
         // User exists in database -> Restore session directly (Direct Login!)
         onLoginSuccess(matchedUser);
       } else {
-        // New user -> Start onboarding with prefilled real Google info
+        // New user -> Start onboarding with prefilled real Google info (photos uploaded by user in onboarding)
         onStartOnboarding({
           authType: 'google',
           email: emailToMatch,
           name: name || emailToMatch.split('@')[0],
-          photo: photo || null,
-          photos: photo ? [photo, null, null, null, null, null] : [null, null, null, null, null, null],
+          photo: null,
+          photos: [null, null, null, null, null, null],
           authProvider: 'google'
         });
       }
@@ -151,8 +151,8 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
         authType: 'google',
         email: emailToMatch,
         name: name || emailToMatch.split('@')[0],
-        photo: photo || null,
-        photos: photo ? [photo, null, null, null, null, null] : [null, null, null, null, null, null],
+        photo: null,
+        photos: [null, null, null, null, null, null],
         authProvider: 'google'
       });
     }

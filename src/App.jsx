@@ -624,7 +624,7 @@ export default function App() {
             startsAt: mem?.starts_at || null,
             expiresAt: mem?.expires_at || null,
             plan: mem?.plan_type ? formatPlanName(mem.plan_type) : (dbProfile.gender === 'Woman' ? 'Free Pass for Women' : '1 Month VIP Pass'),
-            photos: dbProfile.photos && dbProfile.photos.length > 0 ? dbProfile.photos : (photo ? [photo] : []),
+            photos: dbProfile.photos && dbProfile.photos.length > 0 ? dbProfile.photos : [],
             registered: dbProfile.created_at ? new Date(dbProfile.created_at).toLocaleDateString() : 'Today'
           };
           }
@@ -646,8 +646,8 @@ export default function App() {
         authType: 'google',
         email,
         name,
-        photo,
-        photos: photo ? [photo, null, null, null, null, null] : [null, null, null, null, null, null],
+        photo: null,
+        photos: [null, null, null, null, null, null],
         authProvider: 'google'
       });
     }

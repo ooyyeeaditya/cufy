@@ -42,7 +42,7 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
     drugs: 'Never',
     photos: (initialData?.photos && Array.isArray(initialData.photos) && initialData.photos.some(Boolean))
       ? initialData.photos
-      : (initialData?.photo ? [initialData.photo, null, null, null, null, null] : [null, null, null, null, null, null]),
+      : [null, null, null, null, null, null],
     bio: '',
     prompt1: 'Together, we could...',
     prompt1Answer: '',
