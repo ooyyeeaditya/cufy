@@ -167,7 +167,8 @@ input, textarea, select {
     min-height: 100vh !important;
     min-height: 100dvh !important;
     min-height: -webkit-fill-available !important;
-    overflow-x: hidden;
+    overflow: hidden !important;
+    overscroll-behavior: none !important;
     background-color: #F5F3EF !important;
     display: flex !important;
     flex-direction: column !important;
@@ -184,7 +185,8 @@ input, textarea, select {
     display: flex !important;
     flex-direction: column !important;
     background-color: #F5F3EF !important;
-    overflow-x: hidden;
+    overflow: hidden !important;
+    overscroll-behavior: none !important;
   }
 
   .global-topbar {

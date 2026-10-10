@@ -61,6 +61,48 @@ export default function SwipeableHomeFeed({
   const isBoostLive = Boolean(userProfile?.boostActiveUntil && new Date(userProfile.boostActiveUntil) > new Date());
   const boostCredits = userProfile?.boostCredits || 0;
 
+  // Cufy Like (1 per day limit + First time onboarding confirmation modal)
+  const [showCufyLikeIntroModal, setShowCufyLikeIntroModal] = useState(false);
+  const [showCufyLikeLimitModal, setShowCufyLikeLimitModal] = useState(false);
+  const [cufyLikeHoursLeft, setCufyLikeHoursLeft] = useState(24);
+  const [cufyLikeToast, setCufyLikeToast] = useState('');
+
+  const handleStarClick = () => {
+    if (!currentProfile) return;
+    const userKey = (userProfile?.email || 'guest').toLowerCase().trim();
+    const lastUsed = localStorage.getItem(`cufy_last_cufy_like_${userKey}`);
+    const now = Date.now();
+    const oneDayMs = 24 * 60 * 60 * 1000;
+
+    if (lastUsed) {
+      const diff = now - parseInt(lastUsed, 10);
+      if (diff < oneDayMs) {
+        const hoursRemaining = Math.max(1, Math.ceil((oneDayMs - diff) / (1000 * 60 * 60)));
+        setCufyLikeHoursLeft(hoursRemaining);
+        setShowCufyLikeLimitModal(true);
+        return;
+      }
+    }
+
+    const hasSeenIntro = localStorage.getItem(`cufy_seen_cufy_like_intro_${userKey}`);
+    if (!hasSeenIntro) {
+      setShowCufyLikeIntroModal(true);
+      return;
+    }
+
+    executeCufyLike();
+  };
+
+  const executeCufyLike = () => {
+    const userKey = (userProfile?.email || 'guest').toLowerCase().trim();
+    localStorage.setItem(`cufy_last_cufy_like_${userKey}`, Date.now().toString());
+    localStorage.setItem(`cufy_seen_cufy_like_intro_${userKey}`, 'true');
+    setShowCufyLikeIntroModal(false);
+    handleNextProfile('superlike');
+    setCufyLikeToast(`⭐ Cufy Like sent! Pinned to top of their Likes.`);
+    setTimeout(() => setCufyLikeToast(''), 3500);
+  };
+
   const loadProfilesDeck = async () => {
     setIsLoadingDeck(true);
     try {
@@ -757,9 +799,9 @@ export default function SwipeableHomeFeed({
             <Heart size={30} fill="#FF3B30" stroke="#FF3B30" />
           </button>
 
-          {/* 4. Superlike Button */}
+          {/* 4. Superlike / Cufy Like Button */}
           <button 
-            onClick={() => handleNextProfile('superlike')}
+            onClick={handleStarClick}
             style={{
               width: '48px',
               height: '48px',
@@ -774,10 +816,123 @@ export default function SwipeableHomeFeed({
               cursor: 'pointer',
               transition: 'transform 0.2s var(--ease-spring)'
             }}
-            aria-label="Superlike profile"
+            aria-label="Cufy Like profile"
+            title="Send Cufy Like (1 per day)"
           >
             <Star size={22} fill="#F59E0B" stroke="#F59E0B" />
           </button>
+        </div>
+      )}
+
+      {/* CUFY LIKE FIRST-TIME CONFIRMATION POPUP MODAL (Exact Hinge Popup UI) */}
+      {showCufyLikeIntroModal && (
+        <div className="hinge-age-popup-overlay" style={{ zIndex: 1200 }}>
+          <div className="hinge-age-popup-card">
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '20px',
+              background: '#FFFBEB',
+              border: '2px solid #FCD34D',
+              color: '#D97706',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: '16px'
+            }}>
+              <Star size={28} fill="#F59E0B" stroke="#F59E0B" />
+            </div>
+
+            <h2 style={{ fontSize: '1.65rem', fontWeight: 900, marginBottom: '8px', color: '#09090B' }}>
+              Send a Cufy Like ⭐
+            </h2>
+
+            <p style={{ fontSize: '0.92rem', color: '#52525B', lineHeight: '1.5', marginBottom: '24px' }}>
+              You get <b>1 free Cufy Like every 24 hours</b>. When you send a Cufy Like, your profile is pinned directly to the very top of {currentProfile?.name ? `${currentProfile.name}'s` : "their"} Likes list so they notice you first!
+            </p>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                type="button"
+                onClick={() => setShowCufyLikeIntroModal(false)} 
+                className="btn-secondary"
+                style={{ flex: 1, borderRadius: '24px' }}
+              >
+                Cancel
+              </button>
+
+              <button 
+                type="button"
+                onClick={executeCufyLike} 
+                className="btn-black-pill"
+                style={{ flex: 1 }}
+              >
+                Send Cufy Like
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CUFY LIKE DAILY LIMIT REACHED MODAL (Exact Hinge Popup UI) */}
+      {showCufyLikeLimitModal && (
+        <div className="hinge-age-popup-overlay" style={{ zIndex: 1200 }}>
+          <div className="hinge-age-popup-card">
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '20px',
+              background: '#FEF3C7',
+              border: '2px solid #FCD34D',
+              color: '#D97706',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: '16px'
+            }}>
+              <Star size={28} fill="#F59E0B" stroke="#F59E0B" />
+            </div>
+
+            <h2 style={{ fontSize: '1.65rem', fontWeight: 900, marginBottom: '8px', color: '#09090B' }}>
+              Daily Limit Reached
+            </h2>
+
+            <p style={{ fontSize: '0.92rem', color: '#52525B', lineHeight: '1.5', marginBottom: '24px' }}>
+              You get <b>1 free Cufy Like per day</b>. Your next Cufy Like will be available in ~<b>{cufyLikeHoursLeft} hours</b>.
+            </p>
+
+            <button 
+              type="button"
+              onClick={() => setShowCufyLikeLimitModal(false)} 
+              className="btn-black-pill"
+              style={{ width: '100%' }}
+            >
+              Got It
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* FLOATING CUFY LIKE TOAST */}
+      {cufyLikeToast && (
+        <div style={{
+          position: 'fixed',
+          top: '76px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: '#09090B',
+          color: '#FCD34D',
+          padding: '12px 20px',
+          borderRadius: '18px',
+          fontSize: '0.85rem',
+          fontWeight: 800,
+          boxShadow: '0 12px 32px rgba(0,0,0,0.3)',
+          zIndex: 1000,
+          maxWidth: '350px',
+          textAlign: 'center',
+          border: '1px solid rgba(252, 211, 77, 0.3)'
+        }} className="animate-fade-in">
+          {cufyLikeToast}
         </div>
       )}
 

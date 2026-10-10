@@ -11,9 +11,17 @@ function HomeIconSVG({ size = 22, color = 'currentColor', strokeWidth = 2 }) {
   );
 }
 
-export default function BottomNav({ activeTab, onChangeTab }) {
+export default function BottomNav({ activeTab, onChangeTab, isShiftedDown = false }) {
   return (
-    <div className="custom-curved-navbar-container">
+    <div 
+      className={`custom-curved-navbar-container ${isShiftedDown ? 'nav-shifted-down' : ''}`}
+      style={{
+        transform: isShiftedDown ? 'translateY(120px)' : 'translateY(0)',
+        opacity: isShiftedDown ? 0 : 1,
+        pointerEvents: isShiftedDown ? 'none' : 'auto',
+        transition: 'transform 0.38s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease'
+      }}
+    >
       {/* Curved SVG Background Path with Central Concave Cutout */}
       <svg className="navbar-svg-bg" viewBox="0 0 400 70" preserveAspectRatio="none">
         <path 
@@ -29,13 +37,20 @@ export default function BottomNav({ activeTab, onChangeTab }) {
         />
       </svg>
 
-      {/* Center Floating Cupid Logo Badge (Perfect Circle!) */}
+      {/* Center Floating Cupid Logo Badge (Smoothly shifts down when typing!) */}
       <button 
         onClick={() => onChangeTab('home')} 
         className="center-mascot-badge"
         aria-label="Cupid Home Logo"
         title="Cufy Home"
-        style={{ overflow: 'hidden', padding: 0, border: '3px solid #FFFFFF' }}
+        style={{ 
+          overflow: 'hidden', 
+          padding: 0, 
+          border: '3px solid #FFFFFF',
+          transform: isShiftedDown ? 'translateX(-50%) translateY(40px) scale(0.8)' : 'translateX(-50%) translateY(0) scale(1)',
+          opacity: isShiftedDown ? 0 : 1,
+          transition: 'transform 0.38s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease'
+        }}
       >
         <img 
           src="/photos/cupidlogo.jpg" 

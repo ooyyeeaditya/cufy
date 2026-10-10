@@ -42,6 +42,8 @@ export default function App() {
   const [selectedProfile, setSelectedProfile] = useState(INITIAL_DAILY_MATCH);
   const [activeChatMatch, setActiveChatMatch] = useState(null); // Default null so Chat tab ALWAYS opens Chat Logs!
   const [matchedProfile, setMatchedProfile] = useState(null);
+  const [isChatKeyboardOpen, setIsChatKeyboardOpen] = useState(false);
+  const [activeChatThreadId, setActiveChatThreadId] = useState(null);
 
   // User Session & Onboarding Data
   const [userProfile, setUserProfile] = useState(null);
@@ -762,9 +764,23 @@ export default function App() {
         localStorage.setItem('cufy_user_matches', JSON.stringify(matches));
       }
 
-      // 2. Save match thread to cufy_conversations array
+      // 2. Save match thread to cufy_conversations array & sanitize fake messages
       const convsStr = localStorage.getItem('cufy_conversations');
       let convs = convsStr ? JSON.parse(convsStr) : [];
+
+      // Clean existing threads of any previously generated fake canned messages!
+      convs = convs.map(c => {
+        if (c.id === 'cufy_official' || c.isOfficial) return c;
+        const realMsgs = (c.messages || []).filter(m => 
+          m.text !== 'Hey! Excited to connect with you on Cufy!' &&
+          m.text !== 'That sounds fantastic! Let us meet up this Saturday.'
+        );
+        return {
+          ...c,
+          messages: realMsgs,
+          lastMessage: realMsgs.length > 0 ? realMsgs[realMsgs.length - 1].text : `It's a Match! Say hi to ${c.name}`
+        };
+      });
 
       if (!convs.some(c => c.id === 'cufy_official' || c.isOfficial)) {
         convs.unshift({
@@ -797,11 +813,9 @@ export default function App() {
           photo: photoUrl,
           lastMessage: `It's a Match! Say hi to ${profile.name}`,
           time: 'Just now',
-          unread: true,
+          unread: false,
           badge: 'New Match',
-          messages: [
-            { id: 1, sender: 'them', text: `Hey! Excited to connect with you on Cufy!`, time: 'Just now' }
-          ]
+          messages: [] // Real matches start clean with NO fake messages
         };
         convs.unshift(newThread);
       }
@@ -1118,6 +1132,8 @@ export default function App() {
                       matchProfile={activeChatMatch}
                       onBack={() => handleTabChange('home')}
                       userProfile={userProfile}
+                      onKeyboardStateChange={(isOpen) => setIsChatKeyboardOpen(isOpen)}
+                      onActiveThreadChange={(threadId) => setActiveChatThreadId(threadId)}
                     />
                   )}
 
@@ -1136,10 +1152,11 @@ export default function App() {
                     />
                   )}
 
-                  {/* Bottom Custom Curved Cutout Navigation Bar */}
+                  {/* Bottom Custom Curved Cutout Navigation Bar (Smoothly slides down when keyboard is active) */}
                   <BottomNav 
                     activeTab={appTab}
                     onChangeTab={handleTabChange}
+                    isShiftedDown={isChatKeyboardOpen}
                   />
                 </>
               )}

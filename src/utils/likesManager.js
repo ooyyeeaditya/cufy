@@ -88,9 +88,15 @@ export async function recordUserLike(currentUser, targetProfile, isSuperlike = f
           jobTitle: currentUser.jobTitle || currentUser.occupation || '',
           height: currentUser.height || "5'5\"",
           religion: currentUser.religion || 'Spiritual',
-          email: currentUser.email
+          email: currentUser.email,
+          is_cufy_like: Boolean(isSuperlike),
+          is_superlike: Boolean(isSuperlike),
+          liked_at: Date.now()
         };
-        const updatedRecv = [publicSenderProfile, ...existingRecv];
+        // Always place Cufy Likes right at the front of the receiver's list
+        const updatedRecv = isSuperlike 
+          ? [publicSenderProfile, ...existingRecv]
+          : [...existingRecv, publicSenderProfile];
         localStorage.setItem(recvKey, JSON.stringify(updatedRecv));
       }
     } catch (err) {

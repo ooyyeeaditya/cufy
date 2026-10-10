@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Send, ShieldCheck, CheckCheck, Bell, MessageSquare } from 'lucide-react';
 import { HOME_SWIPE_PROFILES } from '../../data/mockProfiles';
 
-export default function ChatDrawer({ matchProfile, onBack, userProfile }) {
+export default function ChatDrawer({ matchProfile, onBack, userProfile, onKeyboardStateChange, onActiveThreadChange }) {
   const [userMatches, setUserMatches] = useState(() => {
     try {
       const saved = localStorage.getItem('cufy_user_matches');
@@ -10,13 +10,27 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile }) {
     } catch (e) { return []; }
   });
 
-  // Chat Logs State - Safe initialization with persistent storage
+  // Chat Logs State - Safe initialization with persistent storage & fake message sanitization
   const [conversations, setConversations] = useState(() => {
     try {
       const savedStr = localStorage.getItem('cufy_conversations');
       const savedMatchesStr = localStorage.getItem('cufy_user_matches');
       let saved = savedStr ? JSON.parse(savedStr) : [];
       let matches = savedMatchesStr ? JSON.parse(savedMatchesStr) : [];
+
+      // Clean existing threads of any previously generated fake canned messages!
+      saved = saved.map(c => {
+        if (c.id === 'cufy_official' || c.isOfficial) return c;
+        const realMsgs = (c.messages || []).filter(m => 
+          m.text !== 'Hey! Excited to connect with you on Cufy!' &&
+          m.text !== 'That sounds fantastic! Let us meet up this Saturday.'
+        );
+        return {
+          ...c,
+          messages: realMsgs,
+          lastMessage: realMsgs.length > 0 ? realMsgs[realMsgs.length - 1].text : `It's a Match! Say hi to ${c.name}`
+        };
+      });
 
       matches.forEach(m => {
         const threadId = (m.id || m.name).toLowerCase();
@@ -28,11 +42,9 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile }) {
             photo: photoUrl,
             lastMessage: `It's a Match! Say hi to ${m.name}`,
             time: 'Just now',
-            unread: true,
+            unread: false,
             badge: 'New Match',
-            messages: [
-              { id: 1, sender: 'them', text: `Hey! Excited to connect with you on Cufy!`, time: 'Just now' }
-            ]
+            messages: [] // Real chats start clean with NO fake messages
           });
         }
       });
@@ -92,6 +104,31 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile }) {
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
 
+  // Keyboard and Viewport tracking
+  const [isInputFocused, setIsInputFocused] = useState(false);
+  const [isVisualKeyboardOpen, setIsVisualKeyboardOpen] = useState(false);
+  const isKeyboardActive = isInputFocused || isVisualKeyboardOpen;
+  const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    onKeyboardStateChange?.(isKeyboardActive);
+  }, [isKeyboardActive]);
+
+  useEffect(() => {
+    onActiveThreadChange?.(activeThreadId);
+  }, [activeThreadId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.visualViewport) return;
+    const vv = window.visualViewport;
+    const handleViewportResize = () => {
+      const isKeyboard = window.innerHeight - vv.height > 150;
+      setIsVisualKeyboardOpen(isKeyboard);
+    };
+    vv.addEventListener('resize', handleViewportResize);
+    return () => vv.removeEventListener('resize', handleViewportResize);
+  }, []);
+
   // Sync prop matchProfile if passed directly
   useEffect(() => {
     if (matchProfile && matchProfile.name) {
@@ -111,11 +148,9 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile }) {
             photo: photoUrl,
             lastMessage: `It's a Match! Say hi to ${matchProfile.name}`,
             time: 'Just now',
-            unread: true,
+            unread: false,
             badge: 'New Match',
-            messages: [
-              { id: 1, sender: 'them', text: `Hey! Excited to connect with you on Cufy!`, time: 'Just now' }
-            ]
+            messages: [] // NO fake automated message!
           };
           updated = [newThread, ...prev];
         } else {
@@ -142,6 +177,13 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile }) {
   }, [matchProfile]);
 
   const currentThread = conversations.find(c => c.id === activeThreadId);
+
+  // Auto scroll to latest message
+  useEffect(() => {
+    if (activeThreadId && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [activeThreadId, currentThread?.messages?.length, isKeyboardActive]);
 
   const handleSend = (e) => {
     e.preventDefault();
@@ -172,35 +214,34 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile }) {
 
     setInputText('');
 
-    // Typing simulation
-    setIsTyping(true);
-    setTimeout(() => {
-      setIsTyping(false);
-      const isOfficial = activeThreadId === 'cufy_official';
-      const replyMsg = {
-        id: Date.now() + 1,
-        sender: 'them',
-        text: isOfficial 
-          ? 'Thanks for reaching out! ⚡ Our support & admin team monitors this channel. Boost approvals & official announcements will be delivered here.'
-          : 'That sounds fantastic! Let us meet up this Saturday.',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      setConversations(prev => {
-        const updated = prev.map(c => {
-          if (c.id === activeThreadId) {
-            return {
-              ...c,
-              lastMessage: replyMsg.text,
-              time: 'Just now',
-              messages: [...c.messages, replyMsg]
-            };
-          }
-          return c;
+    // ONLY auto-respond for Cufy Official channel! NEVER send fake replies from regular user matches
+    if (activeThreadId === 'cufy_official') {
+      setIsTyping(true);
+      setTimeout(() => {
+        setIsTyping(false);
+        const replyMsg = {
+          id: Date.now() + 1,
+          sender: 'them',
+          text: 'Thanks for reaching out! ⚡ Our support & admin team monitors this channel. Boost approvals & official announcements will be delivered here.',
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        setConversations(prev => {
+          const updated = prev.map(c => {
+            if (c.id === activeThreadId) {
+              return {
+                ...c,
+                lastMessage: replyMsg.text,
+                time: 'Just now',
+                messages: [...c.messages, replyMsg]
+              };
+            }
+            return c;
+          });
+          try { localStorage.setItem('cufy_conversations', JSON.stringify(updated)); } catch (e) {}
+          return updated;
         });
-        try { localStorage.setItem('cufy_conversations', JSON.stringify(updated)); } catch (e) {}
-        return updated;
-      });
-    }, 1200);
+      }, 1000);
+    }
   };
 
   return (
@@ -473,12 +514,32 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile }) {
         </div>
       )}
 
-      {/* 2. SINGLE CONVERSATION VIEW (NO CALL / VIDEO CALL BUTTONS AT ALL!) */}
+      {/* 2. SINGLE CONVERSATION VIEW (PINNED HEADER & SMOOTH SCROLL) */}
       {activeThreadId && currentThread && (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', padding: '12px 16px 80px', justifyContent: 'space-between', position: 'relative', zIndex: 10 }}>
-          
-          {/* Header Bar */}
-          <div>
+        <div 
+          style={{ 
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: '100%',
+            height: '100%',
+            display: 'flex', 
+            flexDirection: 'column', 
+            background: '#F5F3EF',
+            overflow: 'hidden',
+            zIndex: 90
+          }}
+        >
+          {/* Header Bar & Safety Banner (Pinned, flexShrink: 0) */}
+          <div style={{
+            flexShrink: 0,
+            padding: '12px 16px 0',
+            background: 'rgba(245, 243, 239, 0.98)',
+            backdropFilter: 'blur(16px)',
+            zIndex: 10
+          }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '12px', borderBottom: '1px solid #E4E4E7' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <button onClick={() => setActiveThreadId(null)} style={{ padding: '8px', background: '#FFFFFF', borderRadius: '12px' }} aria-label="Back to chat logs">
@@ -512,43 +573,84 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile }) {
               alignItems: 'center',
               gap: '8px'
             }}>
-              <ShieldCheck size={16} style={{ color: '#FF3B30' }} />
+              <ShieldCheck size={16} style={{ color: '#FF3B30', flexShrink: 0 }} />
               <span>Encrypted private chat. Keep conversations respectful.</span>
             </div>
           </div>
 
-          {/* Messages History */}
-          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', margin: '12px 0' }}>
-            {currentThread.messages.map(msg => (
-              <div 
-                key={msg.id}
-                style={{
-                  alignSelf: msg.sender === 'me' ? 'flex-end' : 'flex-start',
-                  maxWidth: '82%',
-                  padding: '14px 18px',
-                  borderRadius: msg.sender === 'me' ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
-                  background: msg.sender === 'me' ? 'linear-gradient(135deg, #FF3B30 0%, #E03131 100%)' : '#FFFFFF',
-                  color: msg.sender === 'me' ? '#FFFFFF' : '#09090B',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
-                  border: msg.sender === 'me' ? 'none' : '1.5px solid #E4E4E7'
-                }}
-              >
-                <div style={{ fontSize: '0.94rem', lineHeight: '1.45', fontWeight: 600 }}>{msg.text}</div>
+          {/* Messages History (Only this element scrolls within boundaries) */}
+          <div 
+            style={{ 
+              flex: 1, 
+              minHeight: 0,
+              overflowY: 'auto', 
+              WebkitOverflowScrolling: 'touch',
+              overscrollBehavior: 'contain',
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: '12px', 
+              padding: '12px 16px'
+            }}
+          >
+            {currentThread.messages.length === 0 ? (
+              <div style={{
+                textAlign: 'center',
+                padding: '30px 16px',
+                margin: 'auto 0',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '12px'
+              }}>
                 <div style={{
-                  fontSize: '0.7rem',
-                  marginTop: '4px',
-                  textAlign: 'right',
-                  opacity: 0.85,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'flex-end',
-                  gap: '4px'
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '22px',
+                  overflow: 'hidden',
+                  border: '2px solid #FF3B30',
+                  boxShadow: '0 8px 24px rgba(255, 59, 48, 0.15)'
                 }}>
-                  <span>{msg.time}</span>
-                  {msg.sender === 'me' && <CheckCheck size={13} />}
+                  <img src={currentThread.photo} alt={currentThread.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </div>
+                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#09090B' }}>
+                  You matched with {currentThread.name}!
+                </div>
+                <p style={{ fontSize: '0.85rem', color: '#71717A', maxWidth: '260px', margin: 0, lineHeight: 1.4 }}>
+                  Send a thoughtful message to start your conversation.
+                </p>
               </div>
-            ))}
+            ) : (
+              currentThread.messages.map(msg => (
+                <div 
+                  key={msg.id}
+                  style={{
+                    alignSelf: msg.sender === 'me' ? 'flex-end' : 'flex-start',
+                    maxWidth: '82%',
+                    padding: '14px 18px',
+                    borderRadius: msg.sender === 'me' ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
+                    background: msg.sender === 'me' ? 'linear-gradient(135deg, #FF3B30 0%, #E03131 100%)' : '#FFFFFF',
+                    color: msg.sender === 'me' ? '#FFFFFF' : '#09090B',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
+                    border: msg.sender === 'me' ? 'none' : '1.5px solid #E4E4E7'
+                  }}
+                >
+                  <div style={{ fontSize: '0.94rem', lineHeight: '1.45', fontWeight: 600 }}>{msg.text}</div>
+                  <div style={{
+                    fontSize: '0.7rem',
+                    marginTop: '4px',
+                    textAlign: 'right',
+                    opacity: 0.85,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'flex-end',
+                    gap: '4px'
+                  }}>
+                    <span>{msg.time}</span>
+                    {msg.sender === 'me' && <CheckCheck size={13} />}
+                  </div>
+                </div>
+              ))
+            )}
 
             {isTyping && (
               <div style={{
@@ -565,22 +667,54 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile }) {
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#FF3B30', animation: 'pulse 1s infinite alternate' }}></span>
               </div>
             )}
+            <div ref={messagesEndRef} style={{ height: '1px' }} />
           </div>
 
-          {/* Message Input Form */}
-          <form onSubmit={handleSend} style={{ display: 'flex', gap: '10px' }}>
-            <input 
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder="Send a thoughtful message..."
-              className="form-input"
-              style={{ flex: 1, borderRadius: '16px', background: '#FFFFFF' }}
-            />
-            <button type="submit" className="btn-primary" style={{ width: 'auto', padding: '14px 20px', borderRadius: '16px' }} aria-label="Send message">
-              <Send size={18} />
-            </button>
-          </form>
+          {/* Message Input Form Container (FlexShrink: 0, dynamically adjusts bottom padding) */}
+          <div style={{
+            flexShrink: 0,
+            padding: isKeyboardActive ? '8px 16px 12px' : '8px 16px 88px',
+            background: 'rgba(245, 243, 239, 0.98)',
+            backdropFilter: 'blur(16px)',
+            borderTop: '1px solid rgba(228, 228, 231, 0.6)',
+            transition: 'padding-bottom 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
+            zIndex: 10
+          }}>
+            <form onSubmit={handleSend} style={{ display: 'flex', gap: '10px' }}>
+              <input 
+                type="text"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onFocus={() => {
+                  setIsInputFocused(true);
+                  if (typeof window !== 'undefined') {
+                    window.scrollTo(0, 0);
+                    if (document.body) document.body.scrollTop = 0;
+                  }
+                  setTimeout(() => {
+                    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                  }, 120);
+                }}
+                onBlur={() => setIsInputFocused(false)}
+                placeholder="Send a thoughtful message..."
+                className="form-input"
+                style={{ 
+                  flex: 1, 
+                  borderRadius: '16px', 
+                  background: '#FFFFFF',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.04)' 
+                }}
+              />
+              <button 
+                type="submit" 
+                className="btn-primary" 
+                style={{ width: 'auto', padding: '14px 20px', borderRadius: '16px' }} 
+                aria-label="Send message"
+              >
+                <Send size={18} />
+              </button>
+            </form>
+          </div>
 
         </div>
       )}
