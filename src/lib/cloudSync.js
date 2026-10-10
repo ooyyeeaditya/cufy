@@ -351,11 +351,14 @@ export async function fetchAllCloudUsers() {
       profiles.forEach(p => {
         if (!p.email || p.email === 'cupid.livepro@gmail.com') return;
         const cleanEmail = p.email.toLowerCase().trim();
-        // Strictly exclude accounts deleted by admin
+        // Strictly exclude accounts deleted or suspended by admin
         if (
           p.account_status === 'Deleted' || 
+          p.account_status === 'Suspended' ||
           (p.prompt2_answer && p.prompt2_answer.startsWith('[DELETED]')) ||
           p.name === '[Deleted Account]' ||
+          cleanEmail === 'iamdiamond301@gmail.com' ||
+          cleanEmail === 'sunaina@gmail.com' ||
           deletedKeys.includes(cleanEmail) ||
           (p.id && deletedKeys.includes(p.id))
         ) return;

@@ -1510,88 +1510,87 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
           {step === 19 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               
-              {/* VIP Member Card - Warm Premium Theme */}
+              {/* Editorial Header */}
+              <div style={{ marginBottom: '2px' }}>
+                <h1 className="editorial-title" style={{ margin: 0 }}>VIP Membership</h1>
+                <p className="editorial-subtitle" style={{ marginTop: '4px' }}>
+                  {isFreeLaunchPeriodActive() 
+                    ? 'Special launch access granted. No subscription fee required.' 
+                    : 'Intentional dating without the noise. Choose your access pass.'}
+                </p>
+              </div>
+
+              {/* VIP Member Card - Warm Premium Boutique Theme */}
               <div style={{
-                background: 'linear-gradient(135deg, #FFF8F6 0%, #FFEFEA 100%)',
+                background: '#FFFFFF',
                 color: '#2B2625',
                 borderRadius: '24px',
-                padding: '20px 24px',
-                boxShadow: '0 12px 32px rgba(255, 90, 67, 0.08)',
+                padding: '22px 24px',
+                boxShadow: '0 8px 30px rgba(43, 38, 37, 0.04)',
                 position: 'relative',
-                border: '1.5px solid #FFD8CC'
+                border: '1.5px solid #EFEAE4'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                  <div style={{ color: '#E0533C', fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    {isFreeLaunchPeriodActive() ? '🎉 LAUNCH PROMO: FREE VIP PASS' : (formData.gender === 'Woman' ? 'WOMEN FREE VIP PASS' : 'CUFY VIP ACCESS')}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                  <div style={{
+                    background: '#FAF5EE',
+                    color: '#7D5843',
+                    fontWeight: 800,
+                    fontSize: '0.72rem',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.6px',
+                    padding: '4px 10px',
+                    borderRadius: '100px',
+                    border: '1px solid #EADBCE'
+                  }}>
+                    {isFreeLaunchPeriodActive() ? 'LAUNCH VIP ACCESS' : (formData.gender === 'Woman' ? 'WOMEN VIP ACCESS' : 'CUFY VIP ACCESS')}
                   </div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 900, fontFamily: 'serif', fontStyle: 'italic', color: '#2B2625' }}>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 900, fontFamily: 'serif', fontStyle: 'italic', color: '#1A1A1A' }}>
                     cufy<span style={{ color: '#FF3B30', fontStyle: 'normal' }}>.</span>
                   </div>
                 </div>
 
-                {isFreeLaunchPeriodActive() ? (
-                  <div style={{
-                    background: '#ECFDF5',
-                    border: '1.5px solid #A7F3D0',
-                    padding: '14px 18px',
-                    borderRadius: '16px',
-                    marginBottom: '16px',
-                    color: '#065F46',
-                    textAlign: 'center'
-                  }}>
-                    <div style={{ fontSize: '0.98rem', fontWeight: 900 }}>
-                      🎉 100% Free VIP Access for Everyone!
-                    </div>
-                    <div style={{ fontSize: '0.8rem', marginTop: '4px', fontWeight: 600 }}>
-                      Special launch celebration offer active until <b>15th October</b>. Zero payment required!
-                    </div>
+                <div style={{ marginTop: '12px' }}>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#1A1A1A', letterSpacing: '-0.3px' }}>
+                    {isFreeLaunchPeriodActive()
+                      ? 'Launch Celebration Pass'
+                      : (formData.gender === 'Woman' && selectedPlan.type === 'membership' ? 'Lifetime VIP Pass' : selectedPlan.title)}
                   </div>
-                ) : formData.gender === 'Woman' ? (
-                  <div style={{
-                    background: '#FFF0EC',
-                    border: '1px solid #FFCFC0',
-                    padding: '12px 16px',
-                    borderRadius: '16px',
-                    marginBottom: '16px',
-                    color: '#D9381E',
-                    fontSize: '0.9rem',
-                    fontWeight: 800,
-                    textAlign: 'center'
-                  }}>
-                    Unlimited Free Membership for All Women!
+                  <div style={{ fontSize: '0.84rem', color: '#71717A', marginTop: '4px', fontWeight: 500 }}>
+                    {isFreeLaunchPeriodActive()
+                      ? 'Full VIP access active until 15th October • Zero payment required'
+                      : 'Daily curated connections & direct private chat'}
                   </div>
-                ) : (
-                  <div style={{
-                    background: '#FFFFFF',
-                    border: '1px solid #FFE0D8',
-                    padding: '12px 16px',
-                    borderRadius: '16px',
-                    marginBottom: '16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between'
-                  }}>
-                    <div>
-                      <div style={{ fontSize: '0.68rem', color: '#8C7A77', textTransform: 'uppercase' }}>UPI PAY ID</div>
-                      <div style={{ fontSize: '1rem', fontWeight: 800, color: '#2B2625', fontFamily: 'monospace' }}>aditya.378@superyes</div>
-                    </div>
-                    <button onClick={copyUpiId} style={{ padding: '6px 14px', background: '#FF3B30', color: '#FFFFFF', borderRadius: '10px', fontSize: '0.8rem', fontWeight: 800, border: 'none', cursor: 'pointer' }}>
-                      {upiCopied ? 'Copied!' : 'Copy'}
-                    </button>
-                  </div>
-                )}
+                </div>
+
+                <div style={{ height: '1px', background: '#F4EFEA', margin: '16px 0' }} />
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                   <div>
-                    <div style={{ fontSize: '0.68rem', color: '#8C7A77', textTransform: 'uppercase' }}>SELECTED PLAN</div>
-                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#2B2625' }}>
+                    <div style={{ fontSize: '0.68rem', color: '#8C7A77', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>ACCESS FEE</div>
+                    <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#1A1A1A', marginTop: '2px' }}>
                       {isFreeLaunchPeriodActive()
-                        ? 'Launch Promo VIP Pass (Free until Oct 15)'
-                        : (formData.gender === 'Woman' && selectedPlan.type === 'membership' ? 'Lifetime VIP Pass' : selectedPlan.title)}
+                        ? '30-Day VIP Pass'
+                        : (formData.gender === 'Woman' && selectedPlan.type === 'membership' ? 'Complimentary' : selectedPlan.duration || 'VIP Pass')}
                     </div>
                   </div>
-                  <div style={{ fontSize: '1.4rem', fontWeight: 900, color: isFreeLaunchPeriodActive() ? '#10B981' : '#FF3B30' }}>
-                    {(isFreeLaunchPeriodActive() || (formData.gender === 'Woman' && selectedPlan.type === 'membership')) ? '₹0 FREE' : `₹${selectedPlan.price}`}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '1.6rem', fontWeight: 900, color: '#1A1A1A', letterSpacing: '-0.5px' }}>
+                      {(isFreeLaunchPeriodActive() || (formData.gender === 'Woman' && selectedPlan.type === 'membership')) ? '₹0' : `₹${selectedPlan.price}`}
+                    </span>
+                    {(isFreeLaunchPeriodActive() || (formData.gender === 'Woman' && selectedPlan.type === 'membership')) && (
+                      <span style={{
+                        fontSize: '0.74rem',
+                        fontWeight: 800,
+                        color: '#7D5843',
+                        background: '#FAF5EE',
+                        padding: '3px 8px',
+                        borderRadius: '8px',
+                        border: '1px solid #EADBCE',
+                        letterSpacing: '0.4px'
+                      }}>
+                        FREE
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1601,28 +1600,40 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
                 <div style={{
                   background: '#FFFFFF',
                   borderRadius: '24px',
-                  padding: '20px',
-                  border: '1.5px solid #E4E4E7',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.03)',
+                  padding: '22px',
+                  border: '1.5px solid #EFEAE4',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '14px'
+                  gap: '16px'
                 }}>
-                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#09090B' }}>
-                    What's included in your Free Launch Pass:
+                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#1A1A1A' }}>
+                    What's included in your pass:
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem', color: '#52525B', fontWeight: 600 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ color: '#10B981', fontWeight: 900, fontSize: '1.1rem' }}>✓</span> Unlimited verified profile browsing & swiping
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.86rem', color: '#52525B', fontWeight: 600 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#F5EFE8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Check size={13} strokeWidth={3} color="#2B2625" />
+                      </div>
+                      <span>Unlimited verified profile browsing & swiping</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ color: '#10B981', fontWeight: 900, fontSize: '1.1rem' }}>✓</span> 1 Free Cufy Like every 24 hours
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#F5EFE8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Check size={13} strokeWidth={3} color="#2B2625" />
+                      </div>
+                      <span>1 Free Cufy Like every 24 hours (pinned top placement)</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ color: '#10B981', fontWeight: 900, fontSize: '1.1rem' }}>✓</span> Instant private chat when both users match
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#F5EFE8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Check size={13} strokeWidth={3} color="#2B2625" />
+                      </div>
+                      <span>Instant private chat when mutual match occurs</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ color: '#10B981', fontWeight: 900, fontSize: '1.1rem' }}>✓</span> Valid until 15th October • No payment needed
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#F5EFE8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Check size={13} strokeWidth={3} color="#2B2625" />
+                      </div>
+                      <span>Valid until 15th October • No payment needed</span>
                     </div>
                   </div>
 
@@ -1633,7 +1644,7 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
                     className="btn-black-pill" 
                     style={{ width: '100%', padding: '16px', marginTop: '6px' }}
                   >
-                    {isProcessingPayment ? 'Activating Free VIP Access...' : 'Claim Free Pass & Enter Cufy →'}
+                    {isProcessingPayment ? 'Activating VIP Pass...' : 'Claim Pass & Enter Cufy →'}
                   </button>
                 </div>
               ) : (

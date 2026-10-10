@@ -301,7 +301,15 @@ export function getProfilesForUser(userProfile, registeredUsers = [], filters = 
     const uEmail = (u.email || '').toLowerCase().trim();
     if (userEmail && uEmail === userEmail) return false; // Exclude self
     if (userId && u.id === userId) return false; // Exclude self
-    if (u.status === 'suspended' || u.status === 'deleted') return false;
+    if (
+      u.status === 'suspended' || 
+      u.status === 'deleted' || 
+      u.account_status === 'Suspended' || 
+      u.account_status === 'Deleted' || 
+      u.name === '[Deleted Account]' ||
+      uEmail === 'iamdiamond301@gmail.com' ||
+      uEmail === 'sunaina@gmail.com'
+    ) return false;
 
     if (targetGender !== 'All' && u.gender) {
       if (targetGender === 'Woman' && u.gender !== 'Woman') return false;
