@@ -1,26 +1,67 @@
 import React, { useState, useEffect } from 'react';
 import { Heart, MessageSquare } from 'lucide-react';
-import { getProfilesForUser, HOME_SWIPE_PROFILES } from '../../data/mockProfiles';
-import { fetchAllCloudUsers } from '../../lib/cloudSync';
+import { getSentLikes, getReceivedLikes, syncLikesFromCloud, recordUserLike } from '../../utils/likesManager';
 
-export default function LikesFeed({ onSelectProfile, onOpenChat, userProfile }) {
+export default function LikesFeed({ onSelectProfile, onOpenChat, userProfile, onGoExplore, onOpenSettings }) {
   const [activeTab, setActiveTab] = useState('likes_you'); // 'likes_you' | 'you_liked'
-  const [profiles, setProfiles] = useState(() => getProfilesForUser(userProfile));
+  const [likesYouProfiles, setLikesYouProfiles] = useState(() => getReceivedLikes(userProfile));
+  const [youLikedProfiles, setYouLikedProfiles] = useState(() => getSentLikes(userProfile));
+
+  // Load actual likes for the active user
+  const reloadLikes = async () => {
+    if (!userProfile?.email) return;
+    const localSent = getSentLikes(userProfile);
+    const localReceived = getReceivedLikes(userProfile);
+    setYouLikedProfiles(localSent);
+    setLikesYouProfiles(localReceived);
+
+    try {
+      const cloudLikes = await syncLikesFromCloud(userProfile);
+      if (cloudLikes) {
+        setYouLikedProfiles(cloudLikes.sent || localSent);
+        setLikesYouProfiles(cloudLikes.received || localReceived);
+      }
+    } catch (e) {}
+  };
 
   useEffect(() => {
-    async function loadProfiles() {
-      try {
-        const cloudUsers = await fetchAllCloudUsers();
-        setProfiles(getProfilesForUser(userProfile, cloudUsers));
-      } catch (e) {
-        setProfiles(getProfilesForUser(userProfile));
-      }
-    }
-    loadProfiles();
-  }, [userProfile?.gender, userProfile?.interested_in, userProfile?.email]);
+    reloadLikes();
 
-  const likesYouProfiles = profiles;
-  const youLikedProfiles = profiles.slice(1);
+    // Listen to real-time like broadcasts across open tabs
+    let channel;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        channel = new BroadcastChannel('cufy_global_sync_v1');
+        channel.onmessage = (event) => {
+          if (event?.data?.type === 'CUFY_LIKE_SENT') {
+            const userEmail = (userProfile?.email || '').toLowerCase().trim();
+            if (event.data.receiverEmail === userEmail || event.data.senderEmail === userEmail) {
+              reloadLikes();
+            }
+          }
+        };
+      } catch (e) {}
+    }
+
+    return () => {
+      if (channel) {
+        try { channel.close(); } catch (e) {}
+      }
+    };
+  }, [userProfile?.email, userProfile?.id]);
+
+  const handleMatchAndChat = async (profile) => {
+    if (!profile) return;
+    try {
+      // Record like back to create mutual match
+      await recordUserLike(userProfile, profile);
+      // Refresh state
+      reloadLikes();
+    } catch (e) {}
+    if (onOpenChat) {
+      onOpenChat(profile);
+    }
+  };
 
   return (
     <div style={{
@@ -102,12 +143,12 @@ export default function LikesFeed({ onSelectProfile, onOpenChat, userProfile }) 
         {/* Content Area */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
           
-          {/* POPULATED STATE */}
+          {/* LIKES YOU: POPULATED STATE */}
           {activeTab === 'likes_you' && likesYouProfiles.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
               {likesYouProfiles.map((profile) => (
                 <div 
-                  key={profile.id}
+                  key={profile.id || profile.name}
                   onClick={() => onSelectProfile(profile)}
                   style={{
                     background: '#FFFFFF',
@@ -120,7 +161,7 @@ export default function LikesFeed({ onSelectProfile, onOpenChat, userProfile }) 
                 >
                   <div style={{ height: '160px', position: 'relative', overflow: 'hidden' }}>
                     <img 
-                      src={profile.photos[0]} 
+                      src={Array.isArray(profile.photos) && profile.photos[0] ? profile.photos[0] : (profile.photo || '/photos/front1.jpg')} 
                       alt={profile.name} 
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
@@ -143,17 +184,17 @@ export default function LikesFeed({ onSelectProfile, onOpenChat, userProfile }) 
 
                   <div style={{ padding: '12px' }}>
                     <div style={{ fontSize: '0.95rem', fontWeight: 900, color: '#09090B' }}>
-                      {profile.name}, {profile.age}
+                      {profile.name}, {profile.age || 24}
                     </div>
                     <div style={{ fontSize: '0.75rem', color: '#71717A', fontWeight: 600, margin: '2px 0 8px' }}>
-                      {profile.city}
+                      {profile.city || profile.location || 'Greater Noida'}
                     </div>
 
                     <button 
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onOpenChat(profile);
+                        handleMatchAndChat(profile);
                       }}
                       style={{
                         width: '100%',
@@ -178,11 +219,12 @@ export default function LikesFeed({ onSelectProfile, onOpenChat, userProfile }) 
             </div>
           )}
 
+          {/* YOU LIKED: POPULATED STATE */}
           {activeTab === 'you_liked' && youLikedProfiles.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
               {youLikedProfiles.map((profile) => (
                 <div 
-                  key={profile.id}
+                  key={profile.id || profile.name}
                   onClick={() => onSelectProfile(profile)}
                   style={{
                     background: '#FFFFFF',
@@ -195,7 +237,7 @@ export default function LikesFeed({ onSelectProfile, onOpenChat, userProfile }) 
                 >
                   <div style={{ height: '160px', position: 'relative', overflow: 'hidden' }}>
                     <img 
-                      src={profile.photos[0]} 
+                      src={Array.isArray(profile.photos) && profile.photos[0] ? profile.photos[0] : (profile.photo || '/photos/front1.jpg')} 
                       alt={profile.name} 
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
@@ -203,10 +245,10 @@ export default function LikesFeed({ onSelectProfile, onOpenChat, userProfile }) 
 
                   <div style={{ padding: '12px' }}>
                     <div style={{ fontSize: '0.95rem', fontWeight: 900, color: '#09090B' }}>
-                      {profile.name}, {profile.age}
+                      {profile.name}, {profile.age || 24}
                     </div>
                     <div style={{ fontSize: '0.75rem', color: '#71717A', fontWeight: 600, marginTop: '2px' }}>
-                      {profile.city}
+                      {profile.city || profile.location || 'Greater Noida'}
                     </div>
                   </div>
                 </div>
@@ -214,8 +256,8 @@ export default function LikesFeed({ onSelectProfile, onOpenChat, userProfile }) 
             </div>
           )}
 
-          {/* EMPTY STATE (Matching Screenshot 1) */}
-          {((activeTab === 'likes_you' && likesYouProfiles.length === 0) || (activeTab === 'you_liked' && youLikedProfiles.length === 0)) && (
+          {/* EMPTY STATE FOR LIKES YOU */}
+          {activeTab === 'likes_you' && likesYouProfiles.length === 0 && (
             <div style={{
               flex: 1,
               display: 'flex',
@@ -352,9 +394,60 @@ export default function LikesFeed({ onSelectProfile, onOpenChat, userProfile }) 
                 Great photos and thoughtful prompts are what get people to Like you. Check out our What Works Guide for profile tips.
               </p>
 
-              {/* Black Pill CTA Button from Screenshot 1 */}
-              <button className="btn-black-pill" style={{ width: 'auto', padding: '14px 28px' }}>
-                See what works
+              {/* CTA Button */}
+              <button 
+                onClick={onOpenSettings}
+                className="btn-black-pill" 
+                style={{ width: 'auto', padding: '14px 28px' }}
+              >
+                Boost Your Profile
+              </button>
+
+            </div>
+          )}
+
+          {/* EMPTY STATE FOR YOU LIKED */}
+          {activeTab === 'you_liked' && youLikedProfiles.length === 0 && (
+            <div style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              textAlign: 'center',
+              padding: '20px 16px 40px'
+            }}>
+              
+              <div style={{
+                width: '80px',
+                height: '80px',
+                borderRadius: '50%',
+                background: '#FFFFFF',
+                boxShadow: '0 10px 28px rgba(0,0,0,0.06)',
+                border: '1.5px solid #E4E4E7',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '20px',
+                color: '#FF3B30'
+              }}>
+                <Heart size={36} fill="#FF3B30" />
+              </div>
+
+              <h2 style={{ fontSize: '1.45rem', fontWeight: 900, color: '#09090B', marginBottom: '10px', letterSpacing: '-0.4px' }}>
+                You haven't liked anyone yet
+              </h2>
+
+              <p style={{ fontSize: '0.92rem', color: '#52525B', lineHeight: '1.45', maxWidth: '300px', marginBottom: '28px', fontWeight: 500 }}>
+                Profiles you like while exploring or swiping will appear right here. Start browsing authentic singles near you!
+              </p>
+
+              <button 
+                onClick={onGoExplore}
+                className="btn-black-pill" 
+                style={{ width: 'auto', padding: '14px 28px' }}
+              >
+                Start Exploring
               </button>
 
             </div>

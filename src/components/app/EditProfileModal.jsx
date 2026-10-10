@@ -9,12 +9,14 @@ export default function EditProfileModal({ isOpen, onClose, userProfile, onSave 
   const [name, setName] = useState(userProfile?.name || '');
   const [gender] = useState(userProfile?.gender || 'Man'); // Read-only & locked!
   const [bio, setBio] = useState(userProfile?.bio || '');
-  const [promptQuestion, setPromptQuestion] = useState(userProfile?.promptQuestion || 'Ideal Sunday Morning');
-  const [promptAnswer, setPromptAnswer] = useState(userProfile?.promptAnswer || '');
-  const [height, setHeight] = useState(userProfile?.height || '');
-  const [city, setCity] = useState(userProfile?.city || '');
+  const [promptQuestion, setPromptQuestion] = useState(userProfile?.promptQuestion || userProfile?.prompt1 || 'Ideal Sunday Morning');
+  const [promptAnswer, setPromptAnswer] = useState(userProfile?.promptAnswer || userProfile?.prompt1Answer || '');
+  const [height, setHeight] = useState(
+    userProfile?.height || (userProfile?.heightFeet ? `${userProfile.heightFeet}'${userProfile.heightInches || 0}"` : '')
+  );
+  const [city, setCity] = useState(userProfile?.city || userProfile?.location || '');
   const [occupation, setOccupation] = useState(userProfile?.occupation || userProfile?.jobTitle || '');
-  const [education, setEducation] = useState(userProfile?.education || '');
+  const [education, setEducation] = useState(userProfile?.education || userProfile?.college || userProfile?.degree || '');
   const [religion, setReligion] = useState(userProfile?.religion || '');
 
   const userPhotoList = Array.isArray(userProfile?.photos) 
@@ -38,12 +40,12 @@ export default function EditProfileModal({ isOpen, onClose, userProfile, onSave 
     if (userProfile && isOpen) {
       setName(userProfile.name || '');
       setBio(userProfile.bio || '');
-      setPromptQuestion(userProfile.promptQuestion || 'Ideal Sunday Morning');
-      setPromptAnswer(userProfile.promptAnswer || '');
-      setHeight(userProfile.height || '');
-      setCity(userProfile.city || '');
+      setPromptQuestion(userProfile.promptQuestion || userProfile.prompt1 || 'Ideal Sunday Morning');
+      setPromptAnswer(userProfile.promptAnswer || userProfile.prompt1Answer || '');
+      setHeight(userProfile.height || (userProfile.heightFeet ? `${userProfile.heightFeet}'${userProfile.heightInches || 0}"` : ''));
+      setCity(userProfile.city || userProfile.location || '');
       setOccupation(userProfile.occupation || userProfile.jobTitle || '');
-      setEducation(userProfile.education || '');
+      setEducation(userProfile.education || userProfile.college || userProfile.degree || '');
       setReligion(userProfile.religion || '');
 
       const pList = Array.isArray(userProfile.photos) 
@@ -83,16 +85,32 @@ export default function EditProfileModal({ isOpen, onClose, userProfile, onSave 
 
   const handleFormSubmit = (e) => {
     e.preventDefault();
+    let hFeet = userProfile?.heightFeet || 5;
+    let hInches = userProfile?.heightInches || 0;
+    if (height && typeof height === 'string') {
+      const match = height.match(/(\d+)\s*['ftfeet]*\s*(\d*)/i);
+      if (match && match[1]) {
+        hFeet = parseInt(match[1], 10);
+        if (match[2]) hInches = parseInt(match[2], 10);
+      }
+    }
     const updatedData = {
       name,
       gender,
       bio,
       promptQuestion,
       promptAnswer,
+      prompt1: promptQuestion,
+      prompt1Answer: promptAnswer,
       height,
+      heightFeet: hFeet,
+      heightInches: hInches,
       city,
+      location: city,
       occupation,
+      jobTitle: occupation,
       education,
+      college: education,
       religion,
       photos: photos.filter(p => !!p)
     };

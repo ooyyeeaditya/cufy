@@ -29,6 +29,7 @@ import { syncUserToCloud, formatPlanName, getPlanDurationDays } from './lib/clou
 import { supabase } from './lib/supabase';
 import { Clock, ShieldCheck, Sparkles, RefreshCw, X, LogOut, ShieldAlert } from 'lucide-react';
 import { sendNativeNotification } from './utils/notifications';
+import { recordUserLike } from './utils/likesManager';
 
 import './styles/index.css';
 
@@ -61,28 +62,56 @@ export default function App() {
     try {
       const dbStr = localStorage.getItem('cufy_registered_users');
       let dbUsers = dbStr ? JSON.parse(dbStr) : [];
-      const userEmail = (user.email || 'member@cufy.app').toLowerCase();
-      const existingIdx = dbUsers.findIndex(u => u.email && u.email.toLowerCase() === userEmail);
+      const userEmail = (user.email || 'member@cufy.app').toLowerCase().trim();
+      const existingIdx = dbUsers.findIndex(u => u.email && u.email.toLowerCase().trim() === userEmail);
+
+      const cityVal = user.city || user.location || 'Greater Noida';
+      const eduVal = user.education || user.college || user.degree || '';
+      const jobVal = user.jobTitle || user.occupation || '';
+      const heightVal = user.height || (user.heightFeet ? `${user.heightFeet}'${user.heightInches || 0}"` : "5'5\"");
 
       const record = {
+        ...user,
         id: user.id || `usr_${Date.now()}`,
         name: user.name || 'Member',
         age: user.age || 24,
         gender: user.gender || 'Man',
-        city: user.city || 'Greater Noida',
+        city: cityVal,
+        location: cityVal,
         email: userEmail,
         phone: user.phone || '+91 9876543210',
         status: user.status || (user.gender === 'Woman' ? 'approved' : 'pending_approval'),
         plan: user.plan ? formatPlanName(user.plan, user.gender) : (user.gender === 'Woman' ? 'Lifetime VIP Pass' : '1 Month VIP Pass'),
-        registered: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+        registered: user.registered || new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
         photos: (user.photos && Array.isArray(user.photos) && user.photos.filter(Boolean).length > 0) ? user.photos.filter(Boolean) : (user.photo ? [user.photo] : []),
+        bio: user.bio || '',
+        prompt1: user.prompt1 || user.promptQuestion || 'Together, we could...',
+        prompt1Answer: user.prompt1Answer || user.promptAnswer || '',
+        prompt2: user.prompt2 || 'I get along best with people who...',
+        prompt2Answer: user.prompt2Answer || '',
+        promptQuestion: user.promptQuestion || user.prompt1 || 'Ideal Sunday Morning',
+        promptAnswer: user.promptAnswer || user.prompt1Answer || '',
+        height: heightVal,
+        heightFeet: user.heightFeet || 5,
+        heightInches: user.heightInches || 0,
+        college: eduVal,
+        education: eduVal,
+        jobTitle: jobVal,
+        occupation: jobVal,
+        religion: user.religion || 'Spiritual',
+        hometown: user.hometown || '',
+        drinking: user.drinking || 'Socially',
+        smoking: user.smoking || 'Never',
+        pronouns: user.pronouns || '',
+        ethnicity: user.ethnicity || ['South Asian'],
+        intent: user.intent || 'Serious relationship',
         boostCredits: user.boostCredits !== undefined ? user.boostCredits : (user.plan?.includes('799') || user.plan?.includes('month') || user.plan?.includes('VIP') ? 1 : 0),
         boostActiveUntil: user.boostActiveUntil || null,
         paymentProofUrl: user.paymentProofUrl || user.paymentProof || null,
         voiceNoteUrl: user.voiceNoteUrl || user.voice_note_url || null,
         voice_note_url: user.voiceNoteUrl || user.voice_note_url || null,
         matches: user.matches || [],
-        payments: user.payments || [{ plan: user.plan || '1 Month Pass', amount: '₹799', date: 'Today', status: user.status === 'approved' ? 'Approved' : 'Pending', screenshot: user.paymentProofUrl || null }]
+        payments: user.payments || [{ plan: user.plan || '1 Month Pass', amount: user.gender === 'Woman' ? '₹0 FREE' : (user.planPrice ? `₹${user.planPrice}` : '₹799'), date: 'Today', status: user.status === 'approved' ? 'Approved' : 'Pending', screenshot: user.paymentProofUrl || null }]
       };
 
       if (existingIdx >= 0) {
@@ -205,6 +234,25 @@ export default function App() {
         }
 
         if (parsed) {
+          parsed = {
+            ...parsed,
+            city: parsed.city || parsed.location || 'Greater Noida',
+            location: parsed.location || parsed.city || 'Greater Noida',
+            height: parsed.height || (parsed.heightFeet ? `${parsed.heightFeet}'${parsed.heightInches || 0}"` : "5'5\""),
+            heightFeet: parsed.heightFeet || 5,
+            heightInches: parsed.heightInches || 0,
+            education: parsed.education || parsed.college || parsed.degree || '',
+            college: parsed.college || parsed.education || '',
+            jobTitle: parsed.jobTitle || parsed.occupation || '',
+            occupation: parsed.occupation || parsed.jobTitle || '',
+            religion: parsed.religion || 'Spiritual',
+            bio: parsed.bio || '',
+            promptQuestion: parsed.promptQuestion || parsed.prompt1 || 'Ideal Sunday Morning',
+            promptAnswer: parsed.promptAnswer || parsed.prompt1Answer || '',
+            prompt1: parsed.prompt1 || parsed.promptQuestion || 'Together, we could...',
+            prompt1Answer: parsed.prompt1Answer || parsed.promptAnswer || ''
+          };
+          localStorage.setItem('cufy_active_user', JSON.stringify(parsed));
           setUserProfile(parsed);
           setViewState('app');
           setIsAdminOpen(false);
@@ -515,18 +563,36 @@ export default function App() {
 
   // Handle Onboarding Completion (Post Payment)
   const handleCompleteOnboarding = (completedData) => {
-    setUserProfile(completedData);
-    localStorage.setItem('cufy_active_user', JSON.stringify(completedData));
-    saveUserToDatabase(completedData);
+    const normalized = {
+      ...completedData,
+      city: completedData.city || completedData.location || 'Greater Noida',
+      location: completedData.location || completedData.city || 'Greater Noida',
+      height: completedData.height || (completedData.heightFeet ? `${completedData.heightFeet}'${completedData.heightInches || 0}"` : "5'5\""),
+      heightFeet: completedData.heightFeet || 5,
+      heightInches: completedData.heightInches || 0,
+      education: completedData.education || completedData.college || completedData.degree || '',
+      college: completedData.college || completedData.education || '',
+      jobTitle: completedData.jobTitle || completedData.occupation || '',
+      occupation: completedData.occupation || completedData.jobTitle || '',
+      religion: completedData.religion || 'Spiritual',
+      bio: completedData.bio || '',
+      promptQuestion: completedData.promptQuestion || completedData.prompt1 || 'Ideal Sunday Morning',
+      promptAnswer: completedData.promptAnswer || completedData.prompt1Answer || '',
+      prompt1: completedData.prompt1 || completedData.promptQuestion || 'Together, we could...',
+      prompt1Answer: completedData.prompt1Answer || completedData.promptAnswer || ''
+    };
+    setUserProfile(normalized);
+    localStorage.setItem('cufy_active_user', JSON.stringify(normalized));
+    saveUserToDatabase(normalized);
 
-    if (completedData.isAdmin) {
+    if (normalized.isAdmin) {
       setViewState('admin');
       setIsAdminOpen(true);
     } else {
       setViewState('app');
       setAppTab('home');
       setIsAdminOpen(false);
-      if (completedData.status === 'approved') {
+      if (normalized.status === 'approved') {
         setShowWelcomeModal(true);
       }
     }
@@ -749,6 +815,17 @@ export default function App() {
   const handleTriggerMatch = (profile) => {
     saveMatchToStorage(profile);
     setMatchedProfile(profile);
+  };
+
+  // Handle liking a profile (saves like, updates "You Liked" and triggers match)
+  const handleLikeProfile = async (profile, isSuperlike = false) => {
+    if (!profile || !userProfile) return;
+    try {
+      await recordUserLike(userProfile, profile, isSuperlike);
+    } catch (e) {
+      console.warn('Like profile error:', e);
+    }
+    handleTriggerMatch(profile);
   };
 
   // Action from Match Modal: direct transition into Chat
@@ -1010,6 +1087,7 @@ export default function App() {
                       onOpenNotifications={() => setIsNotificationOpen(true)}
                       onOpenSettings={() => handleTabChange('settings')}
                       onTriggerMatch={handleTriggerMatch}
+                      onLikeProfile={handleLikeProfile}
                     />
                   )}
 
@@ -1019,6 +1097,8 @@ export default function App() {
                       userProfile={userProfile}
                       onSelectProfile={handleSelectProfile}
                       onOpenChat={(profile) => handleSendMessageFromMatch(profile)}
+                      onGoExplore={() => handleTabChange('home')}
+                      onOpenSettings={() => handleTabChange('settings')}
                     />
                   )}
 
@@ -1028,6 +1108,7 @@ export default function App() {
                       profile={selectedProfile}
                       onBack={() => setAppTab('home')}
                       onOpenChat={handleOpenChat}
+                      onLikeProfile={handleLikeProfile}
                     />
                   )}
 

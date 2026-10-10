@@ -1,12 +1,23 @@
 import React, { useState, useRef } from 'react';
 import { ArrowLeft, Heart, MessageSquare, MapPin, Home, Compass, Award, GraduationCap, Briefcase, Wine, Cigarette, Mic, Play, Pause } from 'lucide-react';
 
-export default function ProfileView({ profile, onBack, onOpenChat }) {
+export default function ProfileView({ profile, onBack, onOpenChat, onLikeProfile }) {
   const [liked, setLiked] = useState(false);
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
   const audioRef = useRef(null);
 
   if (!profile) return null;
+
+  const handleToggleLike = () => {
+    if (!liked) {
+      setLiked(true);
+      if (onLikeProfile) {
+        onLikeProfile(profile);
+      }
+    } else {
+      setLiked(false);
+    }
+  };
 
   const handleToggleVoice = (audioUrl) => {
     if (!audioUrl) return;
@@ -298,7 +309,7 @@ export default function ProfileView({ profile, onBack, onOpenChat }) {
       {/* Floating Interactive Controls */}
       <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
         <button 
-          onClick={() => setLiked(!liked)} 
+          onClick={handleToggleLike} 
           className="btn-secondary"
           style={{ flex: 1, borderColor: liked ? '#FF3B30' : '#E4E4E7', color: liked ? '#FF3B30' : '#09090B', padding: '14px', borderRadius: '16px' }}
         >

@@ -293,10 +293,50 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
     setTimeout(() => setUpiCopied(false), 2000);
   };
 
-  const handlePayment = (e) => {
-    e.preventDefault();
+  const buildCompletedData = (customOverrides = {}) => {
+    const planDays = formData.gender === 'Woman' ? 99999 : (selectedPlan.id === 'day_199' ? 1 : selectedPlan.id === 'week_299' ? 7 : selectedPlan.id === 'days15_499' ? 15 : 30);
+    const heightString = formData.heightFeet ? `${formData.heightFeet}'${formData.heightInches || 0}"` : "5'5\"";
+    const educationString = formData.college || formData.degree || formData.education || '';
+    const jobTitleString = formData.jobTitle || formData.occupation || '';
+    const cityString = formData.location || formData.city || 'Greater Noida';
+    const finalAge = calculatedAge || formData.age || 22;
 
-    // Verify payment screenshot for men
+    return {
+      ...formData,
+      age: finalAge,
+      city: cityString,
+      location: cityString,
+      height: heightString,
+      heightFeet: formData.heightFeet || 5,
+      heightInches: formData.heightInches || 0,
+      education: educationString,
+      college: educationString,
+      jobTitle: jobTitleString,
+      occupation: jobTitleString,
+      religion: formData.religion || 'Spiritual',
+      bio: formData.bio || '',
+      prompt1: formData.prompt1 || 'Together, we could...',
+      prompt1Answer: formData.prompt1Answer || '',
+      prompt2: formData.prompt2 || 'I get along best with people who...',
+      prompt2Answer: formData.prompt2Answer || '',
+      promptQuestion: formData.prompt1 || 'Together, we could...',
+      promptAnswer: formData.prompt1Answer || '',
+      photos: (formData.photos || []).filter(p => Boolean(p) && typeof p === 'string' && p.length > 20),
+      plan: formData.gender === 'Woman' ? 'Lifetime VIP Pass' : selectedPlan.title,
+      planId: formData.gender === 'Woman' ? 'lifetime_women' : selectedPlan.id,
+      planPrice: formData.gender === 'Woman' ? 0 : selectedPlan.price,
+      planDays: planDays,
+      paymentProofUrl: formData.gender === 'Woman' ? null : paymentProofUrl,
+      voiceNoteUrl: formData.voiceNoteUrl || null,
+      voice_note_url: formData.voiceNoteUrl || null,
+      status: formData.gender === 'Woman' ? 'approved' : 'pending_approval',
+      ...customOverrides
+    };
+  };
+
+  const handlePayment = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+
     if (formData.gender !== 'Woman' && !paymentProofUrl) {
       setStepError('Please upload your UPI payment transaction screenshot before submitting.');
       alert('Please upload your UPI payment transaction screenshot before submitting.');
@@ -308,19 +348,7 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
       setIsProcessingPayment(false);
       setPaymentSuccess(true);
       setTimeout(() => {
-        const planDays = formData.gender === 'Woman' ? 99999 : (selectedPlan.id === 'day_199' ? 1 : selectedPlan.id === 'week_299' ? 7 : selectedPlan.id === 'days15_499' ? 15 : 30);
-        const completedData = {
-          ...formData,
-          photos: formData.photos.filter(p => Boolean(p) && typeof p === 'string' && p.length > 20),
-          plan: formData.gender === 'Woman' ? 'Lifetime VIP Pass' : selectedPlan.title,
-          planId: formData.gender === 'Woman' ? 'lifetime_women' : selectedPlan.id,
-          planPrice: formData.gender === 'Woman' ? 0 : selectedPlan.price,
-          planDays: planDays,
-          paymentProofUrl: formData.gender === 'Woman' ? null : paymentProofUrl,
-          voiceNoteUrl: formData.voiceNoteUrl || null,
-          status: formData.gender === 'Woman' ? 'approved' : 'pending_approval'
-        };
-        onCompleteOnboarding(completedData);
+        onCompleteOnboarding(buildCompletedData());
       }, 1000);
     }, 1200);
   };
@@ -1591,17 +1619,14 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
               {formData.gender === 'Woman' && selectedPlan.type === 'membership' ? (
                 <button 
                   type="button" 
-                  onClick={() => onCompleteOnboarding({
-                    ...formData,
-                    photos: formData.photos.filter(p => Boolean(p) && typeof p === 'string' && p.length > 20),
+                  onClick={() => onCompleteOnboarding(buildCompletedData({
                     plan: 'Lifetime VIP Pass',
                     planId: 'lifetime_women',
                     planPrice: 0,
                     planDays: 99999,
                     paymentProofUrl: null,
-                    voiceNoteUrl: formData.voiceNoteUrl || null,
                     status: 'approved'
-                  })} 
+                  }))} 
                   className="btn-black-pill" 
                   style={{ width: '100%', padding: '16px' }}
                 >

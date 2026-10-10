@@ -22,12 +22,12 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
     name: userProfile?.name || '',
     gender: userProfile?.gender || 'Man',
     bio: userProfile?.bio || '',
-    promptQuestion: userProfile?.promptQuestion || 'Ideal Sunday Morning',
-    promptAnswer: userProfile?.promptAnswer || '',
-    height: userProfile?.height || '',
-    city: userProfile?.city || '',
+    promptQuestion: userProfile?.promptQuestion || userProfile?.prompt1 || 'Ideal Sunday Morning',
+    promptAnswer: userProfile?.promptAnswer || userProfile?.prompt1Answer || '',
+    height: userProfile?.height || (userProfile?.heightFeet ? `${userProfile.heightFeet}'${userProfile.heightInches || 0}"` : ''),
+    city: userProfile?.city || userProfile?.location || '',
     occupation: userProfile?.occupation || userProfile?.jobTitle || '',
-    education: userProfile?.education || '',
+    education: userProfile?.education || userProfile?.college || userProfile?.degree || '',
     religion: userProfile?.religion || '',
     photos: (userProfile?.photos && userProfile.photos.length > 0) ? userProfile.photos : (userProfile?.photo ? [userProfile.photo] : [])
   });
@@ -39,12 +39,12 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
         name: userProfile.name || '',
         gender: userProfile.gender || 'Man',
         bio: userProfile.bio || '',
-        promptQuestion: userProfile.promptQuestion || 'Ideal Sunday Morning',
-        promptAnswer: userProfile.promptAnswer || '',
-        height: userProfile.height || '',
-        city: userProfile.city || '',
+        promptQuestion: userProfile.promptQuestion || userProfile.prompt1 || 'Ideal Sunday Morning',
+        promptAnswer: userProfile.promptAnswer || userProfile.prompt1Answer || '',
+        height: userProfile.height || (userProfile.heightFeet ? `${userProfile.heightFeet}'${userProfile.heightInches || 0}"` : ''),
+        city: userProfile.city || userProfile.location || '',
         occupation: userProfile.occupation || userProfile.jobTitle || '',
-        education: userProfile.education || '',
+        education: userProfile.education || userProfile.college || userProfile.degree || '',
         religion: userProfile.religion || '',
         photos: (userProfile.photos && userProfile.photos.length > 0) ? userProfile.photos : (userProfile?.photo ? [userProfile.photo] : [])
       });
@@ -74,17 +74,19 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
     else if (data.bio && data.bio.trim().length > 0) score += 10;
     
     // Prompt Answer (15% max)
-    if (data.promptAnswer && data.promptAnswer.trim().length >= 5) score += 15;
-    else if (data.promptAnswer && data.promptAnswer.trim().length > 0) score += 8;
+    const pAns = data.promptAnswer || data.prompt1Answer;
+    if (pAns && pAns.trim().length >= 5) score += 15;
+    else if (pAns && pAns.trim().length > 0) score += 8;
     
     // City (10%)
-    if (data.city && data.city.trim().length > 0) score += 10;
+    const cityVal = data.city || data.location;
+    if (cityVal && cityVal.trim().length > 0) score += 10;
     
     // Personal Details (Occupation, Education, Height, Religion) (10% max)
     let detailsCount = 0;
     if ((data.occupation && data.occupation.trim().length > 0) || (data.jobTitle && data.jobTitle.trim().length > 0)) detailsCount++;
-    if (data.education && data.education.trim().length > 0) detailsCount++;
-    if (data.height && data.height.trim().length > 0) detailsCount++;
+    if ((data.education && data.education.trim().length > 0) || (data.college && data.college.trim().length > 0)) detailsCount++;
+    if ((data.height && data.height.trim().length > 0) || data.heightFeet) detailsCount++;
     if (data.religion && data.religion.trim().length > 0) detailsCount++;
     if (detailsCount >= 2) score += 10;
     else if (detailsCount === 1) score += 5;
@@ -100,7 +102,17 @@ export default function SettingsView({ userProfile, onOpenPrivacy, onOpenTerms, 
   };
 
   const handleSaveProfile = (updatedData) => {
-    const updated = { ...profileData, ...updatedData };
+    const updated = { 
+      ...userProfile,
+      ...profileData, 
+      ...updatedData,
+      city: updatedData.city || updatedData.location || profileData.city,
+      location: updatedData.city || updatedData.location || profileData.city,
+      jobTitle: updatedData.occupation || updatedData.jobTitle || profileData.occupation,
+      occupation: updatedData.occupation || updatedData.jobTitle || profileData.occupation,
+      college: updatedData.education || updatedData.college || profileData.education,
+      education: updatedData.education || updatedData.college || profileData.education
+    };
     setProfileData(updated);
     const newScore = calculateProfileScore(updated);
 

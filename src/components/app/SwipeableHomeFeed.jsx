@@ -11,6 +11,7 @@ export default function SwipeableHomeFeed({
   onOpenNotifications, 
   onOpenSettings,
   onTriggerMatch,
+  onLikeProfile,
   userProfile,
   onUpdateProfile,
   activeFilters
@@ -128,8 +129,12 @@ export default function SwipeableHomeFeed({
       setDeck(prev => prev.slice(1));
       setGlideClass('');
 
-      if ((actionType === 'like' || actionType === 'superlike') && active && onTriggerMatch) {
-        onTriggerMatch(active);
+      if ((actionType === 'like' || actionType === 'superlike') && active) {
+        if (onLikeProfile) {
+          onLikeProfile(active, actionType === 'superlike');
+        } else if (onTriggerMatch) {
+          onTriggerMatch(active);
+        }
       }
     }, 360);
   };
