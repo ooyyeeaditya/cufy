@@ -20,6 +20,7 @@ export function formatPlanName(plan, gender) {
   if (gender === 'Woman') return 'Lifetime VIP Pass';
   if (!plan) return '1 Month VIP Pass';
   const p = plan.toString().toLowerCase();
+  if (p.includes('promo') || p.includes('launch')) return 'Launch Promo VIP Pass';
   if (p.includes('women') || p.includes('woman') || p.includes('free') || p.includes('lifetime')) return 'Lifetime VIP Pass';
   if (p.includes('1_day') || p.includes('1 day') || p.includes('day_199')) return '1 Day Pass';
   if (p.includes('1_week') || p.includes('1 week') || p.includes('week_299')) return '1 Week Pass';
@@ -32,6 +33,7 @@ export function formatPlanName(plan, gender) {
 export function getSimplifiedPlanBadge(plan, amount, gender) {
   if (gender === 'Woman') return 'Lifetime VIP (Free)';
   const p = (plan || '').toString().toLowerCase();
+  if (p.includes('promo') || p.includes('launch')) return 'Launch Promo (Free)';
   if (p.includes('women') || p.includes('woman') || p.includes('free') || p.includes('lifetime')) return 'Lifetime VIP (Free)';
   if (p.includes('799') || p.includes('month') || p.includes('vip')) return '₹799 Plan';
   if (p.includes('499') || p.includes('15')) return '₹499 Plan';
@@ -261,6 +263,7 @@ export async function syncUserToCloud(record) {
       let dbPlanType = '1_month';
       const pl = (syncPayload.plan || '').toLowerCase();
       if (syncPayload.gender === 'Woman') dbPlanType = 'free_women';
+      else if (pl.includes('promo') || pl.includes('free') || syncPayload.planId === 'free_launch_promo') dbPlanType = 'free_promo';
       else if (pl.includes('1_day') || pl.includes('1 day')) dbPlanType = '1_day';
       else if (pl.includes('1_week') || pl.includes('1 week')) dbPlanType = '1_week';
       else if (pl.includes('15_days') || pl.includes('15 days')) dbPlanType = '15_days';
@@ -273,7 +276,7 @@ export async function syncUserToCloud(record) {
       const memPayload = {
         user_id: finalProfileId,
         plan_type: dbPlanType,
-        price: syncPayload.gender === 'Woman' ? 0 : (record.planPrice || 799),
+        price: (syncPayload.gender === 'Woman' || syncPayload.planPrice === 0 || pl.includes('promo') || pl.includes('free')) ? 0 : (record.planPrice || 799),
         status: syncPayload.status === 'approved' ? 'approved' : 'pending',
         starts_at: syncPayload.startsAt || null,
         expires_at: syncPayload.expiresAt || null

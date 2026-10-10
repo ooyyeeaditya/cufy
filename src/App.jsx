@@ -30,6 +30,7 @@ import { supabase } from './lib/supabase';
 import { Clock, ShieldCheck, Sparkles, RefreshCw, X, LogOut, ShieldAlert } from 'lucide-react';
 import { sendNativeNotification } from './utils/notifications';
 import { recordUserLike, isMutualMatch } from './utils/likesManager';
+import { isFreeLaunchPeriodActive, FREE_PROMO_END_DATE } from './utils/promoManager';
 
 import './styles/index.css';
 
@@ -82,8 +83,12 @@ export default function App() {
         location: cityVal,
         email: userEmail,
         phone: user.phone || '+91 9876543210',
-        status: user.status || (user.gender === 'Woman' ? 'approved' : 'pending_approval'),
-        plan: user.plan ? formatPlanName(user.plan, user.gender) : (user.gender === 'Woman' ? 'Lifetime VIP Pass' : '1 Month VIP Pass'),
+        status: (isFreeLaunchPeriodActive() && (!user.status || user.status === 'pending_approval'))
+          ? 'approved'
+          : (user.status || (user.gender === 'Woman' ? 'approved' : 'pending_approval')),
+        plan: isFreeLaunchPeriodActive()
+          ? (user.gender === 'Woman' ? 'Lifetime VIP Pass' : 'Launch Promo VIP Pass')
+          : (user.plan ? formatPlanName(user.plan, user.gender) : (user.gender === 'Woman' ? 'Lifetime VIP Pass' : '1 Month VIP Pass')),
         registered: user.registered || new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
         photos: (user.photos && Array.isArray(user.photos) && user.photos.filter(Boolean).length > 0) ? user.photos.filter(Boolean) : (user.photo ? [user.photo] : []),
         bio: user.bio || '',
@@ -206,7 +211,10 @@ export default function App() {
             let updatedStatus = parsed.status;
             if (dbProf.account_status === 'Suspended') updatedStatus = 'suspended';
             else if (isDbRejected) updatedStatus = 'rejected';
-            else if (isExpired) updatedStatus = 'expired';
+            else if (isExpired && !isFreeLaunchPeriodActive()) updatedStatus = 'expired';
+            else if (isFreeLaunchPeriodActive()) {
+              updatedStatus = 'approved';
+            }
             else if (isDbPending) {
               updatedStatus = 'pending_approval';
             }
@@ -467,7 +475,7 @@ export default function App() {
         // 5. Check if pending approval vs approved
         const isDbPending = mem?.status === 'pending' || (userProfile && (userProfile.status === 'pending_approval' || userProfile.status === 'pending'));
 
-        if (isDbPending && !isDbRejected) {
+        if (isDbPending && !isDbRejected && !isFreeLaunchPeriodActive()) {
           if (userProfile.status !== 'pending_approval') {
             const pendingUser = {
               ...userProfile,
@@ -477,7 +485,7 @@ export default function App() {
             setUserProfile(pendingUser);
             localStorage.setItem('cufy_active_user', JSON.stringify(pendingUser));
           }
-        } else if (dbProf && (dbProf.is_verified || mem?.status === 'approved' || (userProfile.gender === 'Woman' && userProfile.status !== 'pending_approval'))) {
+        } else if (isFreeLaunchPeriodActive() || (dbProf && (dbProf.is_verified || mem?.status === 'approved' || (userProfile.gender === 'Woman' && userProfile.status !== 'pending_approval')))) {
           if (userProfile.status !== 'approved') {
             const startsAt = mem?.starts_at || now.toISOString();
             const expiresAt = mem?.expires_at || new Date(now.getTime() + 30 * 86400000).toISOString();
@@ -583,6 +591,15 @@ export default function App() {
       prompt1: completedData.prompt1 || completedData.promptQuestion || 'Together, we could...',
       prompt1Answer: completedData.prompt1Answer || completedData.promptAnswer || ''
     };
+
+    if (isFreeLaunchPeriodActive() && normalized.status !== 'rejected' && normalized.status !== 'suspended') {
+      normalized.status = 'approved';
+      if (!normalized.plan || normalized.plan.includes('1 Month')) {
+        normalized.plan = 'Launch Promo VIP Pass';
+      }
+      normalized.planPrice = 0;
+    }
+
     setUserProfile(normalized);
     localStorage.setItem('cufy_active_user', JSON.stringify(normalized));
     saveUserToDatabase(normalized);
@@ -875,7 +892,9 @@ export default function App() {
     setViewState('welcome');
   };
 
-  const isPendingApproval = userProfile && (userProfile.status === 'pending_approval' || userProfile.status === 'pending') && !userProfile.isAdmin;
+  const isPendingApproval = !isFreeLaunchPeriodActive() && Boolean(
+    userProfile && (userProfile.status === 'pending_approval' || userProfile.status === 'pending') && !userProfile.isAdmin
+  );
 
   const isVerificationRejected = userProfile && userProfile.status === 'rejected' && !userProfile.isAdmin;
 
@@ -885,7 +904,7 @@ export default function App() {
     !userProfile.isAdmin
   );
 
-  const isMembershipExpired = Boolean(
+  const isMembershipExpired = !isFreeLaunchPeriodActive() && Boolean(
     userProfile &&
     !userProfile.isAdmin &&
     userProfile.gender !== 'Woman' &&

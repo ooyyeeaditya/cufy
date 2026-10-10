@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Check, Lock, CreditCard, ShieldCheck, Sparkles, 
 import { validateName, validateEmail, validatePhotos, checkRateLimit } from '../../utils/validation';
 import { fileToCompressedBase64 } from '../../utils/imageUpload';
 import VoiceNoteRecorder from '../common/VoiceNoteRecorder';
+import { isFreeLaunchPeriodActive, FREE_PROMO_END_DATE, getFreePromoRemainingDays } from '../../utils/promoManager';
 
 export default function OnboardingWizard({ initialData, onCompleteOnboarding, onCancel }) {
   // Total onboarding step count including question steps and interstitials
@@ -322,14 +323,27 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
       promptQuestion: formData.prompt1 || 'Together, we could...',
       promptAnswer: formData.prompt1Answer || '',
       photos: (formData.photos || []).filter(p => Boolean(p) && typeof p === 'string' && p.length > 20),
-      plan: formData.gender === 'Woman' ? 'Lifetime VIP Pass' : selectedPlan.title,
-      planId: formData.gender === 'Woman' ? 'lifetime_women' : selectedPlan.id,
-      planPrice: formData.gender === 'Woman' ? 0 : selectedPlan.price,
-      planDays: planDays,
-      paymentProofUrl: formData.gender === 'Woman' ? null : paymentProofUrl,
+      plan: formData.gender === 'Woman' 
+        ? 'Lifetime VIP Pass' 
+        : isFreeLaunchPeriodActive() 
+          ? 'Launch Promo VIP Pass (Free until Oct 15)' 
+          : selectedPlan.title,
+      planId: formData.gender === 'Woman' 
+        ? 'lifetime_women' 
+        : isFreeLaunchPeriodActive() 
+          ? 'free_launch_promo' 
+          : selectedPlan.id,
+      planPrice: (formData.gender === 'Woman' || isFreeLaunchPeriodActive()) ? 0 : selectedPlan.price,
+      planDays: formData.gender === 'Woman' ? 99999 : isFreeLaunchPeriodActive() ? 30 : planDays,
+      paymentProofUrl: (formData.gender === 'Woman' || isFreeLaunchPeriodActive()) ? null : paymentProofUrl,
       voiceNoteUrl: formData.voiceNoteUrl || null,
       voice_note_url: formData.voiceNoteUrl || null,
-      status: formData.gender === 'Woman' ? 'approved' : 'pending_approval',
+      status: (formData.gender === 'Woman' || isFreeLaunchPeriodActive()) ? 'approved' : 'pending_approval',
+      expiresAt: formData.gender === 'Woman' 
+        ? null 
+        : isFreeLaunchPeriodActive() 
+          ? FREE_PROMO_END_DATE.toISOString() 
+          : new Date(Date.now() + planDays * 24 * 60 * 60 * 1000).toISOString(),
       ...customOverrides
     };
   };
@@ -337,7 +351,9 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
   const handlePayment = (e) => {
     if (e && e.preventDefault) e.preventDefault();
 
-    if (formData.gender !== 'Woman' && !paymentProofUrl) {
+    const isFree = formData.gender === 'Woman' || isFreeLaunchPeriodActive();
+
+    if (!isFree && !paymentProofUrl) {
       setStepError('Please upload your UPI payment transaction screenshot before submitting.');
       alert('Please upload your UPI payment transaction screenshot before submitting.');
       return;
@@ -349,8 +365,8 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
       setPaymentSuccess(true);
       setTimeout(() => {
         onCompleteOnboarding(buildCompletedData());
-      }, 1000);
-    }, 1200);
+      }, 500);
+    }, 600);
   };
 
   // Height Control Handlers (FT/IN & CM sync)
@@ -1506,14 +1522,31 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
                   <div style={{ color: '#E0533C', fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    {formData.gender === 'Woman' ? 'WOMEN FREE VIP PASS' : 'CUFY VIP ACCESS'}
+                    {isFreeLaunchPeriodActive() ? '🎉 LAUNCH PROMO: FREE VIP PASS' : (formData.gender === 'Woman' ? 'WOMEN FREE VIP PASS' : 'CUFY VIP ACCESS')}
                   </div>
                   <div style={{ fontSize: '1.2rem', fontWeight: 900, fontFamily: 'serif', fontStyle: 'italic', color: '#2B2625' }}>
                     cufy<span style={{ color: '#FF3B30', fontStyle: 'normal' }}>.</span>
                   </div>
                 </div>
 
-                {formData.gender === 'Woman' ? (
+                {isFreeLaunchPeriodActive() ? (
+                  <div style={{
+                    background: '#ECFDF5',
+                    border: '1.5px solid #A7F3D0',
+                    padding: '14px 18px',
+                    borderRadius: '16px',
+                    marginBottom: '16px',
+                    color: '#065F46',
+                    textAlign: 'center'
+                  }}>
+                    <div style={{ fontSize: '0.98rem', fontWeight: 900 }}>
+                      🎉 100% Free VIP Access for Everyone!
+                    </div>
+                    <div style={{ fontSize: '0.8rem', marginTop: '4px', fontWeight: 600 }}>
+                      Special launch celebration offer active until <b>15th October</b>. Zero payment required!
+                    </div>
+                  </div>
+                ) : formData.gender === 'Woman' ? (
                   <div style={{
                     background: '#FFF0EC',
                     border: '1px solid #FFCFC0',
@@ -1552,157 +1585,204 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
                   <div>
                     <div style={{ fontSize: '0.68rem', color: '#8C7A77', textTransform: 'uppercase' }}>SELECTED PLAN</div>
                     <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#2B2625' }}>
-                      {formData.gender === 'Woman' && selectedPlan.type === 'membership' ? 'Lifetime VIP Pass' : selectedPlan.title}
+                      {isFreeLaunchPeriodActive()
+                        ? 'Launch Promo VIP Pass (Free until Oct 15)'
+                        : (formData.gender === 'Woman' && selectedPlan.type === 'membership' ? 'Lifetime VIP Pass' : selectedPlan.title)}
                     </div>
                   </div>
-                  <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#FF3B30' }}>
-                    {formData.gender === 'Woman' && selectedPlan.type === 'membership' ? '₹0 FREE' : `₹${selectedPlan.price}`}
+                  <div style={{ fontSize: '1.4rem', fontWeight: 900, color: isFreeLaunchPeriodActive() ? '#10B981' : '#FF3B30' }}>
+                    {(isFreeLaunchPeriodActive() || (formData.gender === 'Woman' && selectedPlan.type === 'membership')) ? '₹0 FREE' : `₹${selectedPlan.price}`}
                   </div>
                 </div>
               </div>
 
-              {/* Membership Pricing Options (For Men) vs Free Badge (For Women) */}
-              {formData.gender === 'Woman' ? (
-                <div style={{ background: '#FFF8F5', border: '1.5px solid #FFDCD2', padding: '16px', borderRadius: '20px', color: '#8A2B1E' }}>
-                  <div style={{ fontSize: '0.95rem', fontWeight: 800 }}>Women Membership is Always Free!</div>
-                  <div style={{ fontSize: '0.82rem', marginTop: '4px', opacity: 0.9 }}>
-                    No subscription needed. You can optionally purchase Profile Boosts below to get featured at the top.
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <label className="form-label" style={{ marginBottom: '8px' }}>Select Membership Plan</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
-                    {[
-                      { id: 'day_199', title: '1 Day Pass', price: 199 },
-                      { id: 'week_299', title: '1 Week Pass', price: 299 },
-                      { id: 'days15_499', title: '15 Days Pass', price: 499 },
-                      { id: 'month_799', title: '1 Month Pass (Includes 1 Free Boost)', price: 799 }
-                    ].map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => setSelectedPlan({ ...p, type: 'membership' })}
-                        style={{
-                          padding: '12px 14px',
-                          borderRadius: '16px',
-                          background: selectedPlan.id === p.id ? '#FFF0F0' : '#FFFFFF',
-                          border: selectedPlan.id === p.id ? '2px solid #FF3B30' : '1.5px solid #E4E4E7',
-                          color: selectedPlan.id === p.id ? '#FF3B30' : '#09090B',
-                          textAlign: 'left',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <div style={{ fontSize: '0.82rem', fontWeight: 800 }}>{p.title}</div>
-                        <div style={{ fontSize: '1.1rem', fontWeight: 900, marginTop: '2px' }}>₹{p.price}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Direct UPI Payment Button (For Men) */}
-              {formData.gender !== 'Woman' && (
-                <button 
-                  type="button"
-                  onClick={() => {
-                    window.location.href = `upi://pay?pa=aditya.378@superyes&pn=Cufy%20Dating&am=${selectedPlan.price}&cu=INR`;
-                  }}
-                  className="btn-primary"
-                  style={{ width: '100%', padding: '16px' }}
-                >
-                  Pay ₹{selectedPlan.price} via UPI
-                </button>
-              )}
-
-              {/* Payment Proof Screenshot Upload Slot (Or Free Access for Women) */}
-              {formData.gender === 'Woman' && selectedPlan.type === 'membership' ? (
-                <button 
-                  type="button" 
-                  onClick={() => onCompleteOnboarding(buildCompletedData({
-                    plan: 'Lifetime VIP Pass',
-                    planId: 'lifetime_women',
-                    planPrice: 0,
-                    planDays: 99999,
-                    paymentProofUrl: null,
-                    status: 'approved'
-                  }))} 
-                  className="btn-black-pill" 
-                  style={{ width: '100%', padding: '16px' }}
-                >
-                  Access Cufy Free Now
-                </button>
-              ) : (
+              {/* During Free Launch Period: Direct 1-Click Access Card */}
+              {isFreeLaunchPeriodActive() ? (
                 <div style={{
                   background: '#FFFFFF',
-                  borderRadius: '20px',
-                  padding: '16px',
+                  borderRadius: '24px',
+                  padding: '20px',
                   border: '1.5px solid #E4E4E7',
-                  textAlign: 'center'
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.03)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '14px'
                 }}>
-                  <label className="form-label" style={{ marginBottom: '6px' }}>Upload Payment Screenshot</label>
-                  <p style={{ fontSize: '0.78rem', color: '#71717A', marginBottom: '12px' }}>
-                    Upload your transaction screenshot for admin verification.
-                  </p>
-
-                  {paymentProofUrl ? (
-                    <div style={{ position: 'relative', width: '100%', height: '120px', borderRadius: '14px', overflow: 'hidden' }}>
-                      <img src={paymentProofUrl} alt="Payment proof" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      <button 
-                        type="button" 
-                        onClick={() => setPaymentProofUrl(null)}
-                        style={{ position: 'absolute', top: '6px', right: '6px', padding: '4px', background: '#09090B', color: '#FFFFFF', borderRadius: '50%' }}
-                      >
-                        ✕
-                      </button>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#09090B' }}>
+                    What's included in your Free Launch Pass:
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem', color: '#52525B', fontWeight: 600 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ color: '#10B981', fontWeight: 900, fontSize: '1.1rem' }}>✓</span> Unlimited verified profile browsing & swiping
                     </div>
-                  ) : (
-                    <label style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      padding: '16px',
-                      border: '2px dashed #CBD5E1',
-                      borderRadius: '16px',
-                      cursor: 'pointer',
-                      background: '#F9F8F6'
-                    }}>
-                      <Camera size={24} style={{ color: '#FF3B30', marginBottom: '4px' }} />
-                      <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#09090B' }}>
-                        {isUploadingProof ? 'Optimizing screenshot...' : 'Select Screenshot Image'}
-                      </span>
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        style={{ display: 'none' }}
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            try {
-                              setIsUploadingProof(true);
-                              const base64Url = await fileToCompressedBase64(file, 1200, 0.78);
-                              setPaymentProofUrl(base64Url);
-                            } catch (err) {
-                              console.error('Payment proof conversion error:', err);
-                            } finally {
-                              setIsUploadingProof(false);
-                            }
-                          }
-                        }}
-                      />
-                    </label>
-                  )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ color: '#10B981', fontWeight: 900, fontSize: '1.1rem' }}>✓</span> 1 Free Cufy Like every 24 hours
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ color: '#10B981', fontWeight: 900, fontSize: '1.1rem' }}>✓</span> Instant private chat when both users match
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ color: '#10B981', fontWeight: 900, fontSize: '1.1rem' }}>✓</span> Valid until 15th October • No payment needed
+                    </div>
+                  </div>
 
                   <button 
                     type="button" 
                     onClick={handlePayment} 
                     disabled={isProcessingPayment} 
                     className="btn-black-pill" 
-                    style={{ width: '100%', marginTop: '14px' }}
+                    style={{ width: '100%', padding: '16px', marginTop: '6px' }}
                   >
-                    {isProcessingPayment ? 'Submitting Payment Proof...' : 'Submit Screenshot & Access App'}
+                    {isProcessingPayment ? 'Activating Free VIP Access...' : 'Claim Free Pass & Enter Cufy →'}
                   </button>
                 </div>
+              ) : (
+                /* Post-Promo Regular Payment Flow (After Oct 15) */
+                <>
+                  {/* Membership Pricing Options (For Men) vs Free Badge (For Women) */}
+                  {formData.gender === 'Woman' ? (
+                    <div style={{ background: '#FFF8F5', border: '1.5px solid #FFDCD2', padding: '16px', borderRadius: '20px', color: '#8A2B1E' }}>
+                      <div style={{ fontSize: '0.95rem', fontWeight: 800 }}>Women Membership is Always Free!</div>
+                      <div style={{ fontSize: '0.82rem', marginTop: '4px', opacity: 0.9 }}>
+                        No subscription needed. You can optionally purchase Profile Boosts below to get featured at the top.
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="form-label" style={{ marginBottom: '8px' }}>Select Membership Plan</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+                        {[
+                          { id: 'day_199', title: '1 Day Pass', price: 199 },
+                          { id: 'week_299', title: '1 Week Pass', price: 299 },
+                          { id: 'days15_499', title: '15 Days Pass', price: 499 },
+                          { id: 'month_799', title: '1 Month Pass (Includes 1 Free Boost)', price: 799 }
+                        ].map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => setSelectedPlan({ ...p, type: 'membership' })}
+                            style={{
+                              padding: '12px 14px',
+                              borderRadius: '16px',
+                              background: selectedPlan.id === p.id ? '#FFF0F0' : '#FFFFFF',
+                              border: selectedPlan.id === p.id ? '2px solid #FF3B30' : '1.5px solid #E4E4E7',
+                              color: selectedPlan.id === p.id ? '#FF3B30' : '#09090B',
+                              textAlign: 'left',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <div style={{ fontSize: '0.82rem', fontWeight: 800 }}>{p.title}</div>
+                            <div style={{ fontSize: '1.1rem', fontWeight: 900, marginTop: '2px' }}>₹{p.price}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Direct UPI Payment Button (For Men) */}
+                  {formData.gender !== 'Woman' && (
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        window.location.href = `upi://pay?pa=aditya.378@superyes&pn=Cufy%20Dating&am=${selectedPlan.price}&cu=INR`;
+                      }}
+                      className="btn-primary"
+                      style={{ width: '100%', padding: '16px' }}
+                    >
+                      Pay ₹{selectedPlan.price} via UPI
+                    </button>
+                  )}
+
+                  {/* Payment Proof Screenshot Upload Slot (Or Free Access for Women) */}
+                  {formData.gender === 'Woman' && selectedPlan.type === 'membership' ? (
+                    <button 
+                      type="button" 
+                      onClick={() => onCompleteOnboarding(buildCompletedData({
+                        plan: 'Lifetime VIP Pass',
+                        planId: 'lifetime_women',
+                        planPrice: 0,
+                        planDays: 99999,
+                        paymentProofUrl: null,
+                        status: 'approved'
+                      }))} 
+                      className="btn-black-pill" 
+                      style={{ width: '100%', padding: '16px' }}
+                    >
+                      Access Cufy Free Now
+                    </button>
+                  ) : (
+                    <div style={{
+                      background: '#FFFFFF',
+                      borderRadius: '20px',
+                      padding: '16px',
+                      border: '1.5px solid #E4E4E7',
+                      textAlign: 'center'
+                    }}>
+                      <label className="form-label" style={{ marginBottom: '6px' }}>Upload Payment Screenshot</label>
+                      <p style={{ fontSize: '0.78rem', color: '#71717A', marginBottom: '12px' }}>
+                        Upload your transaction screenshot for admin verification.
+                      </p>
+
+                      {paymentProofUrl ? (
+                        <div style={{ position: 'relative', width: '100%', height: '120px', borderRadius: '14px', overflow: 'hidden' }}>
+                          <img src={paymentProofUrl} alt="Payment proof" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <button 
+                            type="button" 
+                            onClick={() => setPaymentProofUrl(null)}
+                            style={{ position: 'absolute', top: '6px', right: '6px', padding: '4px', background: '#09090B', color: '#FFFFFF', borderRadius: '50%' }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <label style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          padding: '16px',
+                          border: '2px dashed #CBD5E1',
+                          borderRadius: '16px',
+                          cursor: 'pointer',
+                          background: '#F9F8F6'
+                        }}>
+                          <Camera size={24} style={{ color: '#FF3B30', marginBottom: '4px' }} />
+                          <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#09090B' }}>
+                            {isUploadingProof ? 'Optimizing screenshot...' : 'Select Screenshot Image'}
+                          </span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            style={{ display: 'none' }}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                try {
+                                  setIsUploadingProof(true);
+                                  const base64Url = await fileToCompressedBase64(file, 1200, 0.78);
+                                  setPaymentProofUrl(base64Url);
+                                } catch (err) {
+                                  console.error('Payment proof conversion error:', err);
+                                } finally {
+                                  setIsUploadingProof(false);
+                                }
+                              }
+                            }}
+                          />
+                        </label>
+                      )}
+
+                      <button 
+                        type="button" 
+                        onClick={handlePayment} 
+                        disabled={isProcessingPayment} 
+                        className="btn-black-pill" 
+                        style={{ width: '100%', marginTop: '14px' }}
+                      >
+                        {isProcessingPayment ? 'Submitting Payment Proof...' : 'Submit Screenshot & Access App'}
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
 
             </div>

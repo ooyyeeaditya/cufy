@@ -522,7 +522,8 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
     usersList.forEach(u => {
       const isApproved = u.status === 'approved';
       const isPending = u.status === 'pending_approval' || u.status === 'pending';
-      const price = u.gender === 'Woman' ? 0 : (u.planPrice || (u.plan?.includes('199') ? 199 : u.plan?.includes('299') ? 299 : u.plan?.includes('499') ? 499 : 799));
+      const isFreeUser = u.gender === 'Woman' || u.planPrice === 0 || (u.plan && (u.plan.includes('Free') || u.plan.includes('Promo')));
+      const price = isFreeUser ? 0 : (u.planPrice || (u.plan?.includes('199') ? 199 : u.plan?.includes('299') ? 299 : u.plan?.includes('499') ? 499 : 799));
 
       if (isApproved) {
         activeApprovedCount++;
