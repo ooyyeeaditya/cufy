@@ -501,14 +501,13 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
       const isApproved = u.status === 'approved';
       const isPending = u.status === 'pending_approval' || u.status === 'pending';
       
-      // Check if registration occurred during promo or is woman / free pass
+      // Free Launch Promo: 100% free for all users registered on or before Oct 15
       const registeredDuringPromo = (u.createdAt && new Date(u.createdAt) <= FREE_PROMO_END_DATE) || isFreeLaunchPeriodActive();
-      const hasExplicitProof = Boolean(u.paymentProofUrl || u.paymentProof || (u.payments && u.payments.length > 0));
 
       const isFreeUser = u.gender === 'Woman' || 
+                         registeredDuringPromo ||
                          u.planPrice === 0 || 
-                         (u.plan && (u.plan.includes('Free') || u.plan.includes('Promo') || u.plan.includes('Launch'))) ||
-                         (!hasExplicitProof && registeredDuringPromo);
+                         (u.plan && (u.plan.includes('Free') || u.plan.includes('Promo') || u.plan.includes('Launch')));
 
       let price = 0;
       if (!isFreeUser) {

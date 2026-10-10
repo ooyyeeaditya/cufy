@@ -4,6 +4,7 @@ import { validateName, validateEmail, validatePhotos, checkRateLimit } from '../
 import { fileToCompressedBase64 } from '../../utils/imageUpload';
 import VoiceNoteRecorder from '../common/VoiceNoteRecorder';
 import { isFreeLaunchPeriodActive, FREE_PROMO_END_DATE, getFreePromoRemainingDays } from '../../utils/promoManager';
+import { requestNotificationPermission } from '../../utils/notifications';
 
 export default function OnboardingWizard({ initialData, onCompleteOnboarding, onCancel }) {
   // Total onboarding step count including question steps and interstitials
@@ -361,6 +362,10 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
     }
 
     setIsProcessingPayment(true);
+    try {
+      requestNotificationPermission().catch(() => {});
+    } catch (e) {}
+
     setTimeout(() => {
       setIsProcessingPayment(false);
       setPaymentSuccess(true);

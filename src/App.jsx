@@ -27,8 +27,8 @@ import { INITIAL_DAILY_MATCH } from './data/mockProfiles';
 import { analytics } from './utils/analytics';
 import { syncUserToCloud, formatPlanName, getPlanDurationDays } from './lib/cloudSync';
 import { supabase } from './lib/supabase';
-import { Clock, ShieldCheck, Sparkles, RefreshCw, X, LogOut, ShieldAlert } from 'lucide-react';
-import { sendNativeNotification } from './utils/notifications';
+import { Clock, ShieldCheck, Sparkles, RefreshCw, X, LogOut, ShieldAlert, Bell } from 'lucide-react';
+import { sendNativeNotification, playNotificationChime, requestNotificationPermission } from './utils/notifications';
 import { recordUserLike, isMutualMatch } from './utils/likesManager';
 import { isFreeLaunchPeriodActive, FREE_PROMO_END_DATE } from './utils/promoManager';
 
@@ -224,17 +224,28 @@ export default function App() {
               isExpired = true;
             }
 
-            const isVerified = Boolean(dbProf.is_verified && (mem ? mem.status === 'approved' : true));
-            const isDbPending = mem?.status === 'pending' || !dbProf.is_verified || (parsed && (parsed.status === 'pending_approval' || parsed.status === 'pending'));
+            const isDbApproved = (dbProf.is_verified === true || mem?.status === 'approved') && !isDbRejected;
+            const isDbPending = !isDbApproved && !isDbRejected && (mem?.status === 'pending' || !dbProf.is_verified);
 
             let updatedStatus = parsed.status;
             if (dbProf.account_status === 'Suspended') updatedStatus = 'suspended';
             else if (isDbRejected) updatedStatus = 'rejected';
             else if (isExpired && !isFreeLaunchPeriodActive()) updatedStatus = 'expired';
+            else if (isDbApproved) {
+              const wasPending = parsed.status === 'pending_approval' || parsed.status === 'pending';
+              updatedStatus = 'approved';
+              if (wasPending) {
+                sendNativeNotification(
+                  'Profile Approved & Live!',
+                  `Welcome to CUFY, ${parsed.name || 'Member'}! Your profile has been approved by admin. Start matching now!`,
+                  { tag: 'cufy-approved', requireInteraction: true }
+                );
+                playNotificationChime();
+              }
+            }
             else if (isDbPending) {
               updatedStatus = 'pending_approval';
             }
-            else if (isVerified) updatedStatus = 'approved';
             else updatedStatus = 'pending_approval';
 
             const realDbPhotos = (dbProf.photos && Array.isArray(dbProf.photos) && dbProf.photos.length > 0)
@@ -342,6 +353,12 @@ export default function App() {
       if (!detail || !detail.email || (currentEmail && detail.email.toLowerCase() === currentEmail)) {
         refreshUserSession();
         if (detail?.status === 'approved') {
+          playNotificationChime();
+          sendNativeNotification(
+            'Profile Approved & Live!',
+            `Welcome to CUFY, ${userProfile?.name || 'Member'}! Your profile is verified and active. Tap to see your matches!`,
+            { tag: 'cufy-approved', requireInteraction: true }
+          );
           setShowWelcomeModal(true);
         }
       }
@@ -488,23 +505,15 @@ export default function App() {
           return;
         }
 
-        // 5. Check if pending approval vs approved
-        const isDbPending = mem?.status === 'pending' || !dbProf?.is_verified || (userProfile && (userProfile.status === 'pending_approval' || userProfile.status === 'pending'));
+        // 5. Strict DB status check: Is the account verified/approved in Supabase?
+        const isDbApproved = (dbProf?.is_verified === true || mem?.status === 'approved') && !isDbRejected;
+        const isDbPending = !isDbApproved && !isDbRejected && (mem?.status === 'pending' || !dbProf?.is_verified);
 
-        if (isDbPending && !isDbRejected) {
-          if (userProfile.status !== 'pending_approval') {
-            const pendingUser = {
-              ...userProfile,
-              status: 'pending_approval',
-              is_verified: false
-            };
-            setUserProfile(pendingUser);
-            localStorage.setItem('cufy_active_user', JSON.stringify(pendingUser));
-          }
-        } else if (dbProf && dbProf.is_verified && (mem ? mem.status === 'approved' : true)) {
-          if (userProfile.status !== 'approved') {
+        if (isDbApproved) {
+          if (userProfile.status !== 'approved' || !userProfile.is_verified) {
             const startsAt = mem?.starts_at || now.toISOString();
             const expiresAt = mem?.expires_at || new Date(now.getTime() + 30 * 86400000).toISOString();
+            const isPromo = isFreeLaunchPeriodActive() || (userProfile.createdAt && new Date(userProfile.createdAt) <= FREE_PROMO_END_DATE);
 
             const approvedUser = {
               ...userProfile,
@@ -512,7 +521,7 @@ export default function App() {
               is_verified: true,
               startsAt,
               expiresAt,
-              plan: mem?.plan_type ? formatPlanName(mem.plan_type) : userProfile.plan
+              plan: mem?.plan_type ? formatPlanName(mem.plan_type) : (isPromo ? 'Launch Promo VIP Pass' : userProfile.plan)
             };
 
             setUserProfile(approvedUser);
@@ -527,7 +536,28 @@ export default function App() {
               }
             } catch (e) {}
 
+            // 1. Play pleasant notification chime
+            playNotificationChime();
+
+            // 2. Dispatch Native Push Notification to Android status bar / desktop center
+            sendNativeNotification(
+              'Profile Approved & Live!',
+              `Welcome to CUFY, ${userProfile.name || 'Member'}! Your profile has been approved and is now live. Tap to see matches!`,
+              { tag: 'cufy-approved', requireInteraction: true }
+            );
+
+            // 3. Show celebration modal
             setShowWelcomeModal(true);
+          }
+        } else if (isDbPending) {
+          if (userProfile.status !== 'pending_approval') {
+            const pendingUser = {
+              ...userProfile,
+              status: 'pending_approval',
+              is_verified: false
+            };
+            setUserProfile(pendingUser);
+            localStorage.setItem('cufy_active_user', JSON.stringify(pendingUser));
           }
         }
       } catch (err) {
@@ -1131,6 +1161,33 @@ export default function App() {
                   </p>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', maxWidth: '280px', zIndex: 10 }}>
+                    {typeof window !== 'undefined' && 'Notification' in window && Notification.permission !== 'granted' && (
+                      <button 
+                        onClick={async () => {
+                          const res = await requestNotificationPermission();
+                          if (res === 'granted') {
+                            alert('Notifications enabled! We will alert you the moment your account goes live.');
+                          }
+                        }}
+                        style={{
+                          padding: '12px',
+                          background: '#FEF3C7',
+                          border: '1px solid #F59E0B',
+                          borderRadius: '12px',
+                          color: '#B45309',
+                          fontSize: '0.82rem',
+                          fontWeight: 700,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <Bell size={16} /> Enable Push Notifications
+                      </button>
+                    )}
+
                     <button 
                       onClick={refreshUserSession}
                       className="btn-primary" 

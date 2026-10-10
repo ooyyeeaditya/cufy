@@ -1,5 +1,5 @@
 // Cufy Native PWA Over-The-Air (OTA) Instant Live Update Service Worker
-const CACHE_NAME = 'cufy-cache-v11';
+const CACHE_NAME = 'cufy-cache-v12';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

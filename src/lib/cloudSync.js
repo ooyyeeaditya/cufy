@@ -1,4 +1,5 @@
 import { supabase, supabaseUrl, supabaseAnonKey } from './supabase';
+import { isFreeLaunchPeriodActive, FREE_PROMO_END_DATE } from '../utils/promoManager';
 
 // Helper: Get plan duration in days
 export function getPlanDurationDays(plan, gender) {
@@ -27,12 +28,12 @@ export function formatPlanName(plan, gender) {
   return plan;
 }
 
-// Helper: Minimal simplified plan badge for spacious clean UI (e.g. ₹799 Plan)
+// Helper: Minimal simplified plan badge for spacious clean UI (e.g. Launch VIP (Free))
 export function getSimplifiedPlanBadge(plan, amount, gender) {
   if (gender === 'Woman') return 'Lifetime VIP (Free)';
   const p = (plan || '').toString().toLowerCase();
-  if (p.includes('promo') || p.includes('launch')) return 'Launch Promo (Free)';
   if (p.includes('women') || p.includes('woman') || p.includes('free') || p.includes('lifetime')) return 'Lifetime VIP (Free)';
+  if (p.includes('promo') || p.includes('launch') || isFreeLaunchPeriodActive()) return 'Launch VIP (Free)';
   if (p.includes('799') || p.includes('month') || p.includes('vip')) return '₹799 Plan';
   if (p.includes('499') || p.includes('15')) return '₹499 Plan';
   if (p.includes('299') || p.includes('week')) return '₹299 Plan';
@@ -258,8 +259,10 @@ export async function syncUserToCloud(record) {
     if (finalProfileId) {
       let dbPlanType = '1_month';
       const pl = (syncPayload.plan || '').toLowerCase();
+      const isPromo = isFreeLaunchPeriodActive() || (syncPayload.createdAt && new Date(syncPayload.createdAt) <= FREE_PROMO_END_DATE);
+
       if (syncPayload.gender === 'Woman') dbPlanType = 'free_women';
-      else if (pl.includes('promo') || pl.includes('free') || syncPayload.planId === 'free_launch_promo') dbPlanType = 'free_promo';
+      else if (isPromo || pl.includes('promo') || pl.includes('free') || syncPayload.planId === 'free_launch_promo') dbPlanType = 'free_promo';
       else if (pl.includes('1_day') || pl.includes('1 day')) dbPlanType = '1_day';
       else if (pl.includes('1_week') || pl.includes('1 week')) dbPlanType = '1_week';
       else if (pl.includes('15_days') || pl.includes('15 days')) dbPlanType = '15_days';
@@ -272,7 +275,7 @@ export async function syncUserToCloud(record) {
       const memPayload = {
         user_id: finalProfileId,
         plan_type: dbPlanType,
-        price: (syncPayload.gender === 'Woman' || syncPayload.planPrice === 0 || pl.includes('promo') || pl.includes('free')) ? 0 : (record.planPrice || 799),
+        price: (syncPayload.gender === 'Woman' || isPromo || syncPayload.planPrice === 0 || pl.includes('promo') || pl.includes('free')) ? 0 : (record.planPrice || 799),
         status: syncPayload.status === 'approved' ? 'approved' : 'pending',
         starts_at: syncPayload.startsAt || null,
         expires_at: syncPayload.expiresAt || null
@@ -446,8 +449,9 @@ export async function fetchAllCloudUsers() {
           isVerified = false;
         }
 
-        const rawPlan = mem?.plan_type || existing?.plan || (resolvedGender === 'Woman' ? 'free_women' : '1_month');
-        const planName = formatPlanName(rawPlan);
+        const isPromo = isFreeLaunchPeriodActive() || (p.created_at && new Date(p.created_at) <= FREE_PROMO_END_DATE);
+        const rawPlan = mem?.plan_type || existing?.plan || (resolvedGender === 'Woman' ? 'free_women' : (isPromo ? 'free_promo' : '1_month'));
+        const planName = isPromo && resolvedGender !== 'Woman' ? 'Launch Promo VIP Pass' : formatPlanName(rawPlan);
         const planDays = getPlanDurationDays(rawPlan);
 
         const realUserPhotos = (p.photos && Array.isArray(p.photos) && p.photos.filter(Boolean).length > 0)
@@ -455,6 +459,9 @@ export async function fetchAllCloudUsers() {
           : (existing?.photos && existing.photos.filter(Boolean).length > 0
               ? existing.photos.filter(Boolean).filter(u => typeof u === 'string' && !u.includes('unsplash.com'))
               : []);
+
+        const effectivePrice = (resolvedGender === 'Woman' || isPromo) ? 0 : (mem?.price ? Number(mem.price) : (rawPlan.includes('199') ? 199 : rawPlan.includes('299') ? 299 : rawPlan.includes('499') ? 499 : 799));
+        const effectiveAmount = (resolvedGender === 'Woman' || isPromo) ? '₹0 FREE' : (mem?.price ? `₹${mem.price}` : '₹799');
 
         const mapped = {
           id: p.id,
@@ -493,7 +500,7 @@ export async function fetchAllCloudUsers() {
           is_verified: isVerified,
           plan: planName,
           planDays: planDays,
-          planPrice: p.gender === 'Woman' ? 0 : (mem?.price ? Number(mem.price) : (rawPlan.includes('199') ? 199 : rawPlan.includes('299') ? 299 : rawPlan.includes('499') ? 499 : 799)),
+          planPrice: effectivePrice,
           startsAt: startsAt,
           expiresAt: expiresAt,
           createdAt: p.created_at || existing?.createdAt || null,
@@ -505,7 +512,7 @@ export async function fetchAllCloudUsers() {
           matches: existing?.matches || [],
           payments: [{
             plan: planName,
-            amount: p.gender === 'Woman' ? '₹0 FREE' : (mem?.price ? `₹${mem.price}` : '₹799'),
+            amount: effectiveAmount,
             date: p.created_at ? new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Today',
             status: userStatus === 'approved' ? 'Approved' : (userStatus === 'rejected' ? 'Rejected' : 'Pending'),
             screenshot: proof
