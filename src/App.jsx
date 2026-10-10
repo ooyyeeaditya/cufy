@@ -181,9 +181,9 @@ export default function App() {
               return;
             }
 
-            // 2. If profile is marked Deleted by admin
-            if (dbProf.account_status === 'Deleted' || (dbProf.prompt2_answer && dbProf.prompt2_answer.startsWith('[DELETED]')) || dbProf.name === '[Deleted Account]') {
-              console.warn('[Session] User profile is marked Deleted. Forcing logout.');
+            // 2. If profile is marked Suspended or Deleted by admin -> FORCE LOGOUT
+            if (dbProf.account_status === 'Suspended' || dbProf.account_status === 'Deleted' || (dbProf.prompt2_answer && dbProf.prompt2_answer.startsWith('[DELETED]')) || dbProf.name === '[Deleted Account]') {
+              console.warn('[Session] User profile is marked Suspended/Deleted. Forcing logout.');
               localStorage.removeItem('cufy_active_user');
               localStorage.removeItem('cufy_user_matches');
               localStorage.removeItem('cufy_conversations');
@@ -621,6 +621,7 @@ export default function App() {
       normalized.planPrice = 0;
     }
 
+    normalized.isNewRegistration = true;
     setUserProfile(normalized);
     localStorage.setItem('cufy_active_user', JSON.stringify(normalized));
     saveUserToDatabase(normalized);
@@ -638,11 +639,10 @@ export default function App() {
     }
   };
 
-  // Direct login for existing members
+  // Direct login for existing members (Read-only session restore, NEVER re-creates deleted records)
   const handleLoginSuccess = (user) => {
     setUserProfile(user);
     localStorage.setItem('cufy_active_user', JSON.stringify(user));
-    saveUserToDatabase(user);
 
     if (user.isAdmin) {
       setViewState('admin');
@@ -684,6 +684,7 @@ export default function App() {
 
         if (dbProfile) {
           if (
+            dbProfile.account_status === 'Suspended' ||
             dbProfile.account_status === 'Deleted' || 
             (dbProfile.prompt2_answer && dbProfile.prompt2_answer.startsWith('[DELETED]')) ||
             dbProfile.name === '[Deleted Account]'

@@ -257,7 +257,7 @@ export async function syncUserToCloud(record) {
         .from('profiles')
         .update(profileData)
         .eq('id', existingProf.id);
-    } else {
+    } else if (record.isNewRegistration) {
       const targetUuid = authUserId || (record.id && record.id.length === 36 ? record.id : generateUUID());
       finalProfileId = targetUuid;
       await supabase
@@ -266,6 +266,8 @@ export async function syncUserToCloud(record) {
           id: targetUuid,
           ...profileData
         });
+    } else {
+      console.warn('[Sync] Profile does not exist in Supabase and is not marked as new registration. Skipping insert.');
     }
 
     // Memberships Table

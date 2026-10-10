@@ -96,13 +96,10 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
       return;
     }
 
-    // Check database for existing registered user
+    // Check Supabase database strictly for existing registered user
     try {
-      const dbStr = localStorage.getItem('cufy_registered_users');
-      const dbUsers = dbStr ? JSON.parse(dbStr) : [];
-      let matchedUser = dbUsers.find(u => u.email && u.email.toLowerCase() === emailToMatch);
-
-      if (!matchedUser && supabase) {
+      let matchedUser = null;
+      if (supabase) {
         try {
           const { data: dbProfile } = await supabase
             .from('profiles')
@@ -110,7 +107,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
             .eq('email', emailToMatch)
             .maybeSingle();
 
-          if (dbProfile) {
+          if (dbProfile && dbProfile.account_status !== 'Deleted' && dbProfile.account_status !== 'Suspended' && dbProfile.name !== '[Deleted Account]') {
             matchedUser = {
               id: dbProfile.id,
               name: dbProfile.name || name || emailToMatch.split('@')[0],
@@ -122,10 +119,6 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
               photos: dbProfile.photos && dbProfile.photos.length > 0 ? dbProfile.photos : [],
               registered: dbProfile.created_at ? new Date(dbProfile.created_at).toLocaleDateString() : 'Today'
             };
-            try {
-              const up = [...dbUsers, matchedUser];
-              localStorage.setItem('cufy_registered_users', JSON.stringify(up));
-            } catch (e) {}
           }
         } catch (sbErr) {
           console.warn('Supabase profile fetch error:', sbErr);
@@ -133,7 +126,7 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
       }
 
       if (matchedUser) {
-        // User exists in database -> Restore session directly (Direct Login!)
+        // User genuinely exists in database -> Restore session directly (Direct Login!)
         onLoginSuccess(matchedUser);
       } else {
         // New user -> Start onboarding with prefilled real Google info (photos uploaded by user in onboarding)
