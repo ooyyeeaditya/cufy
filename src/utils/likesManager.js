@@ -134,9 +134,64 @@ export async function recordUserLike(currentUser, targetProfile, isSuperlike = f
 
   // 5. Check if mutual match: did targetProfile already like currentUser?
   const receivedLikes = getReceivedLikes(currentUser);
-  const isMutual = receivedLikes.some(p => String(p.id || p.name).toLowerCase() === targetId);
+  const targetName = String(targetProfile.name || '').toLowerCase();
+  const targetEmail = String(targetProfile.email || '').toLowerCase();
+  
+  const matchesTarget = (p) => {
+    if (!p) return false;
+    const pId = String(p.id || '').toLowerCase();
+    const pName = String(p.name || '').toLowerCase();
+    const pEmail = String(p.email || '').toLowerCase();
+    return (
+      (targetId && (pId === targetId || pName === targetId)) ||
+      (targetName && (pName === targetName || pId === targetName)) ||
+      (targetEmail && pEmail && pEmail === targetEmail)
+    );
+  };
+
+  const isMutual = receivedLikes.some(matchesTarget);
+
+  // Only if truly mutual, record into confirmed matches
+  if (isMutual) {
+    try {
+      const matchesStr = localStorage.getItem('cufy_user_matches');
+      let matches = matchesStr ? JSON.parse(matchesStr) : [];
+      if (!matches.some(matchesTarget)) {
+        matches.unshift(targetProfile);
+        localStorage.setItem('cufy_user_matches', JSON.stringify(matches));
+      }
+    } catch (e) {}
+  }
 
   return { isMatch: isMutual };
+}
+
+// Check if two users have mutually liked each other
+export function isMutualMatch(currentUser, targetProfile) {
+  if (!currentUser?.email || !targetProfile) return false;
+  const targetId = String(targetProfile.id || '').toLowerCase();
+  const targetName = String(targetProfile.name || '').toLowerCase();
+  const targetEmail = String(targetProfile.email || '').toLowerCase();
+
+  const sentLikes = getSentLikes(currentUser);
+  const receivedLikes = getReceivedLikes(currentUser);
+
+  const matchesTarget = (p) => {
+    if (!p) return false;
+    const pId = String(p.id || '').toLowerCase();
+    const pName = String(p.name || '').toLowerCase();
+    const pEmail = String(p.email || '').toLowerCase();
+    return (
+      (targetId && (pId === targetId || pName === targetId)) ||
+      (targetName && (pName === targetName || pId === targetName)) ||
+      (targetEmail && pEmail && pEmail === targetEmail)
+    );
+  };
+
+  const userLikedThem = sentLikes.some(matchesTarget);
+  const theyLikedUser = receivedLikes.some(matchesTarget);
+
+  return Boolean(userLikedThem && theyLikedUser);
 }
 
 // Fetch real likes from Supabase (or fallback to local)

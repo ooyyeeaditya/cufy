@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Send, ShieldCheck, CheckCheck, Bell, MessageSquare } from 'lucide-react';
 import { HOME_SWIPE_PROFILES } from '../../data/mockProfiles';
+import { isMutualMatch } from '../../utils/likesManager';
 
 export default function ChatDrawer({ matchProfile, onBack, userProfile, onKeyboardStateChange, onActiveThreadChange }) {
   const [userMatches, setUserMatches] = useState(() => {
     try {
       const saved = localStorage.getItem('cufy_user_matches');
-      return saved ? JSON.parse(saved) : [];
+      let matches = saved ? JSON.parse(saved) : [];
+      return matches.filter(m => isMutualMatch(userProfile, m));
     } catch (e) { return []; }
   });
 
@@ -18,19 +20,23 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile, onKeyboa
       let saved = savedStr ? JSON.parse(savedStr) : [];
       let matches = savedMatchesStr ? JSON.parse(savedMatchesStr) : [];
 
-      // Clean existing threads of any previously generated fake canned messages!
-      saved = saved.map(c => {
-        if (c.id === 'cufy_official' || c.isOfficial) return c;
-        const realMsgs = (c.messages || []).filter(m => 
-          m.text !== 'Hey! Excited to connect with you on Cufy!' &&
-          m.text !== 'That sounds fantastic! Let us meet up this Saturday.'
-        );
-        return {
-          ...c,
-          messages: realMsgs,
-          lastMessage: realMsgs.length > 0 ? realMsgs[realMsgs.length - 1].text : `It's a Match! Say hi to ${c.name}`
-        };
-      });
+      // Clean existing threads: ONLY keep genuine mutual matches or Cufy Official!
+      saved = saved
+        .filter(c => c.id === 'cufy_official' || c.isOfficial || isMutualMatch(userProfile, c))
+        .map(c => {
+          if (c.id === 'cufy_official' || c.isOfficial) return c;
+          const realMsgs = (c.messages || []).filter(m => 
+            m.text !== 'Hey! Excited to connect with you on Cufy!' &&
+            m.text !== 'That sounds fantastic! Let us meet up this Saturday.'
+          );
+          return {
+            ...c,
+            messages: realMsgs,
+            lastMessage: realMsgs.length > 0 ? realMsgs[realMsgs.length - 1].text : `It's a Match! Say hi to ${c.name}`
+          };
+        });
+
+      matches = matches.filter(m => isMutualMatch(userProfile, m));
 
       matches.forEach(m => {
         const threadId = (m.id || m.name).toLowerCase();
@@ -100,7 +106,11 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile, onKeyboa
     }
   });
 
-  const [activeThreadId, setActiveThreadId] = useState(matchProfile ? matchProfile.name.toLowerCase() : null);
+  const [activeThreadId, setActiveThreadId] = useState(() => 
+    (matchProfile && isMutualMatch(userProfile, matchProfile)) 
+      ? (matchProfile.id || matchProfile.name).toLowerCase() 
+      : null
+  );
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
 
@@ -109,6 +119,11 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile, onKeyboa
   const [isVisualKeyboardOpen, setIsVisualKeyboardOpen] = useState(false);
   const isKeyboardActive = isInputFocused || isVisualKeyboardOpen;
   const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const [viewportHeight, setViewportHeight] = useState(() => 
+    typeof window !== 'undefined' && window.visualViewport ? window.visualViewport.height : null
+  );
 
   useEffect(() => {
     onKeyboardStateChange?.(isKeyboardActive);
@@ -118,20 +133,43 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile, onKeyboa
     onActiveThreadChange?.(activeThreadId);
   }, [activeThreadId]);
 
+  // Lock document body scroll when single conversation view is active
+  useEffect(() => {
+    if (activeThreadId) {
+      const origOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      window.scrollTo(0, 0);
+      if (document.body) document.body.scrollTop = 0;
+      if (document.documentElement) document.documentElement.scrollTop = 0;
+      return () => {
+        document.body.style.overflow = origOverflow;
+      };
+    }
+  }, [activeThreadId]);
+
   useEffect(() => {
     if (typeof window === 'undefined' || !window.visualViewport) return;
     const vv = window.visualViewport;
     const handleViewportResize = () => {
+      setViewportHeight(vv.height);
       const isKeyboard = window.innerHeight - vv.height > 150;
       setIsVisualKeyboardOpen(isKeyboard);
+      window.scrollTo(0, 0);
+      if (document.body) document.body.scrollTop = 0;
+      if (document.documentElement) document.documentElement.scrollTop = 0;
     };
     vv.addEventListener('resize', handleViewportResize);
-    return () => vv.removeEventListener('resize', handleViewportResize);
+    vv.addEventListener('scroll', handleViewportResize);
+    handleViewportResize();
+    return () => {
+      vv.removeEventListener('resize', handleViewportResize);
+      vv.removeEventListener('scroll', handleViewportResize);
+    };
   }, []);
 
-  // Sync prop matchProfile if passed directly
+  // Sync prop matchProfile if passed directly (ONLY IF MUTUAL MATCH!)
   useEffect(() => {
-    if (matchProfile && matchProfile.name) {
+    if (matchProfile && matchProfile.name && isMutualMatch(userProfile, matchProfile)) {
       const threadId = (matchProfile.id || matchProfile.name).toLowerCase();
       const photoUrl = (matchProfile.photos && matchProfile.photos.length > 0) 
         ? matchProfile.photos[0] 
@@ -186,8 +224,16 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile, onKeyboa
   }, [activeThreadId, currentThread?.messages?.length, isKeyboardActive]);
 
   const handleSend = (e) => {
-    e.preventDefault();
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!inputText.trim() || !activeThreadId) return;
+
+    // Immediately keep input focused so keyboard does not close!
+    if (inputRef.current) {
+      inputRef.current.focus({ preventScroll: true });
+    }
 
     const newMsg = {
       id: Date.now(),
@@ -213,6 +259,18 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile, onKeyboa
     });
 
     setInputText('');
+
+    requestAnimationFrame(() => {
+      if (inputRef.current) {
+        inputRef.current.focus({ preventScroll: true });
+      }
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    });
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus({ preventScroll: true });
+      }
+    }, 50);
 
     // ONLY auto-respond for Cufy Official channel! NEVER send fake replies from regular user matches
     if (activeThreadId === 'cufy_official') {
@@ -242,6 +300,20 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile, onKeyboa
         });
       }, 1000);
     }
+  };
+
+  const handleSelectThread = (threadId) => {
+    if (!threadId) return;
+    if (threadId === 'cufy_official') {
+      setActiveThreadId(threadId);
+      return;
+    }
+    const thread = conversations.find(c => c.id === threadId);
+    if (thread && !isMutualMatch(userProfile, thread)) {
+      alert(`You haven't matched with ${thread.name} yet! Both users must like each other to unlock direct chat.`);
+      return;
+    }
+    setActiveThreadId(threadId);
   };
 
   return (
@@ -320,7 +392,7 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile, onKeyboa
                 {conversations.filter(c => c.id !== 'cufy_official').map((matchItem) => (
                   <div 
                     key={matchItem.id} 
-                    onClick={() => setActiveThreadId(matchItem.id)}
+                    onClick={() => handleSelectThread(matchItem.id)}
                     style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', flexShrink: 0 }}
                   >
                     <div style={{ width: '60px', height: '60px', borderRadius: '20px', overflow: 'hidden', border: '2px solid #FF3B30', boxShadow: '0 4px 14px rgba(255,59,48,0.2)' }}>
@@ -339,7 +411,7 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile, onKeyboa
               {conversations.map((thread) => (
                 <div
                   key={thread.id}
-                  onClick={() => setActiveThreadId(thread.id)}
+                  onClick={() => handleSelectThread(thread.id)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -514,40 +586,63 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile, onKeyboa
         </div>
       )}
 
-      {/* 2. SINGLE CONVERSATION VIEW (PINNED HEADER & SMOOTH SCROLL) */}
+      {/* 2. SINGLE CONVERSATION VIEW (PINNED VIEWPORT, ORGANIC WALLPAPER & SMOOTH KEYBOARD) */}
       {activeThreadId && currentThread && (
         <div 
           style={{ 
-            position: 'absolute',
+            position: 'fixed',
             top: 0,
             left: 0,
             right: 0,
-            bottom: 0,
+            bottom: 'auto',
             width: '100%',
-            height: '100%',
+            height: viewportHeight ? `${viewportHeight}px` : '100dvh',
+            maxHeight: viewportHeight ? `${viewportHeight}px` : '100dvh',
             display: 'flex', 
             flexDirection: 'column', 
             background: '#F5F3EF',
             overflow: 'hidden',
-            zIndex: 90
+            zIndex: 9999
           }}
         >
+          {/* Organic Haikei Wallpaper Layer */}
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage: `url('/photos/haikei2 (2).png')`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            opacity: 0.16,
+            pointerEvents: 'none',
+            zIndex: 0
+          }} />
+
           {/* Header Bar & Safety Banner (Pinned, flexShrink: 0) */}
           <div style={{
             flexShrink: 0,
             padding: '12px 16px 0',
             background: 'rgba(245, 243, 239, 0.98)',
             backdropFilter: 'blur(16px)',
-            zIndex: 10
+            zIndex: 10,
+            position: 'relative'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '12px', borderBottom: '1px solid #E4E4E7' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <button onClick={() => setActiveThreadId(null)} style={{ padding: '8px', background: '#FFFFFF', borderRadius: '12px' }} aria-label="Back to chat logs">
+                <button 
+                  onClick={() => setActiveThreadId(null)} 
+                  style={{ padding: '8px', background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E4E4E7', cursor: 'pointer' }} 
+                  aria-label="Back to chat logs"
+                >
                   <ArrowLeft size={18} />
                 </button>
 
-                <div style={{ width: '42px', height: '42px', borderRadius: '14px', overflow: 'hidden', border: '1.5px solid #FF3B30' }}>
-                  <img src={currentThread.photo} alt={currentThread.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <div style={{ width: '42px', height: '42px', borderRadius: '14px', overflow: 'hidden', border: '1.5px solid #FF3B30', background: '#09090B' }}>
+                  <img 
+                    src={currentThread.photo} 
+                    alt={currentThread.name} 
+                    onError={(e) => { e.target.src = '/photos/cufylogo.jpg'; }} 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                  />
                 </div>
 
                 <div>
@@ -589,7 +684,9 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile, onKeyboa
               display: 'flex', 
               flexDirection: 'column', 
               gap: '12px', 
-              padding: '12px 16px'
+              padding: '12px 16px',
+              position: 'relative',
+              zIndex: 5
             }}
           >
             {currentThread.messages.length === 0 ? (
@@ -610,7 +707,12 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile, onKeyboa
                   border: '2px solid #FF3B30',
                   boxShadow: '0 8px 24px rgba(255, 59, 48, 0.15)'
                 }}>
-                  <img src={currentThread.photo} alt={currentThread.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <img 
+                    src={currentThread.photo} 
+                    alt={currentThread.name} 
+                    onError={(e) => { e.target.src = '/photos/cufylogo.jpg'; }} 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                  />
                 </div>
                 <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#09090B' }}>
                   You matched with {currentThread.name}!
@@ -670,18 +772,22 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile, onKeyboa
             <div ref={messagesEndRef} style={{ height: '1px' }} />
           </div>
 
-          {/* Message Input Form Container (FlexShrink: 0, dynamically adjusts bottom padding) */}
+          {/* Message Input Form Container (Pinned above virtual keyboard) */}
           <div style={{
             flexShrink: 0,
-            padding: isKeyboardActive ? '8px 16px 12px' : '8px 16px 88px',
+            padding: isKeyboardActive ? '8px 14px 10px' : '10px 14px calc(14px + env(safe-area-inset-bottom, 0px))',
             background: 'rgba(245, 243, 239, 0.98)',
             backdropFilter: 'blur(16px)',
-            borderTop: '1px solid rgba(228, 228, 231, 0.6)',
-            transition: 'padding-bottom 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
-            zIndex: 10
+            borderTop: '1px solid rgba(228, 228, 231, 0.8)',
+            zIndex: 10,
+            position: 'relative'
           }}>
-            <form onSubmit={handleSend} style={{ display: 'flex', gap: '10px' }}>
+            <form 
+              onSubmit={handleSend} 
+              style={{ display: 'flex', gap: '10px', alignItems: 'center' }}
+            >
               <input 
+                ref={inputRef}
                 type="text"
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
@@ -690,25 +796,34 @@ export default function ChatDrawer({ matchProfile, onBack, userProfile, onKeyboa
                   if (typeof window !== 'undefined') {
                     window.scrollTo(0, 0);
                     if (document.body) document.body.scrollTop = 0;
+                    if (document.documentElement) document.documentElement.scrollTop = 0;
                   }
                   setTimeout(() => {
                     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-                  }, 120);
+                  }, 100);
                 }}
                 onBlur={() => setIsInputFocused(false)}
                 placeholder="Send a thoughtful message..."
                 className="form-input"
+                enterKeyHint="send"
+                autoComplete="off"
                 style={{ 
                   flex: 1, 
                   borderRadius: '16px', 
                   background: '#FFFFFF',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.04)' 
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                  fontSize: '0.95rem'
                 }}
               />
               <button 
                 type="submit" 
+                onMouseDown={(e) => e.preventDefault()}
+                onTouchStart={(e) => {
+                  e.preventDefault();
+                  handleSend();
+                }}
                 className="btn-primary" 
-                style={{ width: 'auto', padding: '14px 20px', borderRadius: '16px' }} 
+                style={{ width: 'auto', padding: '14px 20px', borderRadius: '16px', flexShrink: 0 }} 
                 aria-label="Send message"
               >
                 <Send size={18} />

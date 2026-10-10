@@ -826,7 +826,7 @@ export default function SwipeableHomeFeed({
 
       {/* CUFY LIKE FIRST-TIME CONFIRMATION POPUP MODAL (Exact Hinge Popup UI) */}
       {showCufyLikeIntroModal && (
-        <div className="hinge-age-popup-overlay" style={{ zIndex: 1200 }}>
+        <div className="hinge-age-popup-overlay" style={{ zIndex: 99999 }}>
           <div className="hinge-age-popup-card">
             <div style={{
               width: '56px',
@@ -876,7 +876,7 @@ export default function SwipeableHomeFeed({
 
       {/* CUFY LIKE DAILY LIMIT REACHED MODAL (Exact Hinge Popup UI) */}
       {showCufyLikeLimitModal && (
-        <div className="hinge-age-popup-overlay" style={{ zIndex: 1200 }}>
+        <div className="hinge-age-popup-overlay" style={{ zIndex: 99999 }}>
           <div className="hinge-age-popup-card">
             <div style={{
               width: '56px',

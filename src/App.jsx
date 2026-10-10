@@ -29,7 +29,7 @@ import { syncUserToCloud, formatPlanName, getPlanDurationDays } from './lib/clou
 import { supabase } from './lib/supabase';
 import { Clock, ShieldCheck, Sparkles, RefreshCw, X, LogOut, ShieldAlert } from 'lucide-react';
 import { sendNativeNotification } from './utils/notifications';
-import { recordUserLike } from './utils/likesManager';
+import { recordUserLike, isMutualMatch } from './utils/likesManager';
 
 import './styles/index.css';
 
@@ -737,8 +737,13 @@ export default function App() {
     setAppTab('profile_detail');
   };
 
-  // Open direct single chat thread
+  // Open direct single chat thread (ONLY IF MUTUAL MATCH!)
   const handleOpenChat = (profile) => {
+    if (!profile) return;
+    if (!isMutualMatch(userProfile, profile)) {
+      alert(`It's not a match yet! You can start chatting with ${profile.name} once both of you like each other.`);
+      return;
+    }
     setActiveChatMatch(profile);
     setAppTab('chat');
   };
@@ -753,6 +758,10 @@ export default function App() {
 
   const saveMatchToStorage = (profile) => {
     if (!profile || !profile.name) return;
+    if (!isMutualMatch(userProfile, profile)) {
+      console.warn('Cannot save match: Both users must like each other first.');
+      return;
+    }
     try {
       const threadId = (profile.id || profile.name).toLowerCase();
       
@@ -831,19 +840,28 @@ export default function App() {
     setMatchedProfile(profile);
   };
 
-  // Handle liking a profile (saves like, updates "You Liked" and triggers match)
+  // Handle liking a profile (saves like, updates "You Liked" and triggers match ONLY IF MUTUAL!)
   const handleLikeProfile = async (profile, isSuperlike = false) => {
     if (!profile || !userProfile) return;
+    let likeResult = { isMatch: false };
     try {
-      await recordUserLike(userProfile, profile, isSuperlike);
+      likeResult = await recordUserLike(userProfile, profile, isSuperlike);
     } catch (e) {
       console.warn('Like profile error:', e);
     }
-    handleTriggerMatch(profile);
+    // ONLY trigger "It's a Match!" celebration screen & open chat IF BOTH users liked each other!
+    if (likeResult && likeResult.isMatch) {
+      handleTriggerMatch(profile);
+    }
   };
 
-  // Action from Match Modal: direct transition into Chat
+  // Action from Match Modal: direct transition into Chat (ONLY IF MUTUAL MATCH!)
   const handleSendMessageFromMatch = (profile) => {
+    if (!profile) return;
+    if (!isMutualMatch(userProfile, profile)) {
+      alert(`It's not a match yet! You can start chatting with ${profile.name} once both of you like each other.`);
+      return;
+    }
     saveMatchToStorage(profile);
     setMatchedProfile(null);
     setActiveChatMatch(profile);
@@ -1120,6 +1138,7 @@ export default function App() {
                   {appTab === 'profile_detail' && (
                     <ProfileView 
                       profile={selectedProfile}
+                      userProfile={userProfile}
                       onBack={() => setAppTab('home')}
                       onOpenChat={handleOpenChat}
                       onLikeProfile={handleLikeProfile}

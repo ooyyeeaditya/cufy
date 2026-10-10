@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { ArrowLeft, Heart, MessageSquare, MapPin, Home, Compass, Award, GraduationCap, Briefcase, Wine, Cigarette, Mic, Play, Pause } from 'lucide-react';
+import { isMutualMatch } from '../../utils/likesManager';
 
-export default function ProfileView({ profile, onBack, onOpenChat, onLikeProfile }) {
+export default function ProfileView({ profile, onBack, onOpenChat, onLikeProfile, userProfile }) {
   const [liked, setLiked] = useState(false);
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
   const audioRef = useRef(null);
@@ -314,16 +315,29 @@ export default function ProfileView({ profile, onBack, onOpenChat, onLikeProfile
           style={{ flex: 1, borderColor: liked ? '#FF3B30' : '#E4E4E7', color: liked ? '#FF3B30' : '#09090B', padding: '14px', borderRadius: '16px' }}
         >
           <Heart size={20} fill={liked ? '#FF3B30' : 'none'} color={liked ? '#FF3B30' : '#09090B'} />
-          {liked ? 'Liked' : 'Like'}
+          {liked ? 'Liked' : 'Like Profile'}
         </button>
 
         <button 
-          onClick={() => onOpenChat(profile)} 
+          onClick={() => {
+            const isMatched = isMutualMatch(userProfile, profile);
+            if (!isMatched) {
+              alert(`You haven't matched with ${profile.name} yet! Both users must like each other to unlock direct chat.`);
+              return;
+            }
+            onOpenChat(profile);
+          }} 
           className="btn-primary"
-          style={{ flex: 1, padding: '14px', borderRadius: '16px' }}
+          style={{ 
+            flex: 1, 
+            padding: '14px', 
+            borderRadius: '16px',
+            opacity: isMutualMatch(userProfile, profile) ? 1 : 0.6
+          }}
+          title={isMutualMatch(userProfile, profile) ? "Open Chat" : "Requires Mutual Match"}
         >
           <MessageSquare size={18} />
-          Message
+          {isMutualMatch(userProfile, profile) ? 'Message' : 'Match to Chat'}
         </button>
       </div>
 
