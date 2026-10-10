@@ -166,9 +166,30 @@ export default function App() {
               .eq('email', cleanEmail)
               .maybeSingle();
 
-            // 1. If profile is marked Deleted by admin
-            if (dbProf && (dbProf.account_status === 'Deleted' || (dbProf.prompt2_answer && dbProf.prompt2_answer.startsWith('[DELETED]')) || dbProf.name === '[Deleted Account]')) {
+            // 1. If profile does not exist in Supabase (Deleted by admin) -> FORCE LOGOUT IMMEDIATELY
+            if (!dbProf) {
+              console.warn('[Session] User profile not found in Supabase (Deleted by admin). Forcing logout.');
               localStorage.removeItem('cufy_active_user');
+              localStorage.removeItem('cufy_user_matches');
+              localStorage.removeItem('cufy_conversations');
+              if (supabase?.auth) {
+                try { await supabase.auth.signOut(); } catch (e) {}
+              }
+              setUserProfile(null);
+              setViewState('welcome');
+              setIsAdminOpen(false);
+              return;
+            }
+
+            // 2. If profile is marked Deleted by admin
+            if (dbProf.account_status === 'Deleted' || (dbProf.prompt2_answer && dbProf.prompt2_answer.startsWith('[DELETED]')) || dbProf.name === '[Deleted Account]') {
+              console.warn('[Session] User profile is marked Deleted. Forcing logout.');
+              localStorage.removeItem('cufy_active_user');
+              localStorage.removeItem('cufy_user_matches');
+              localStorage.removeItem('cufy_conversations');
+              if (supabase?.auth) {
+                try { await supabase.auth.signOut(); } catch (e) {}
+              }
               setUserProfile(null);
               setViewState('welcome');
               setIsAdminOpen(false);
@@ -651,16 +672,9 @@ export default function App() {
       return;
     }
 
-    // 2. Check local database for existing registered user
+    // 2. SUPABASE IS THE PRIMARY SOURCE OF TRUTH FOR REGISTERED USERS
     let matchedUser = null;
-    try {
-      const dbStr = localStorage.getItem('cufy_registered_users');
-      const dbUsers = dbStr ? JSON.parse(dbStr) : [];
-      matchedUser = dbUsers.find(u => u.email && u.email.toLowerCase() === email);
-    } catch (e) {}
-
-    // 3. Check Supabase profiles table if not matched in localStorage
-    if (!matchedUser && supabase) {
+    if (supabase) {
       try {
         const { data: dbProfile } = await supabase
           .from('profiles')
@@ -697,31 +711,36 @@ export default function App() {
             else if (isVerified) finalStatus = 'approved';
             else finalStatus = 'pending_approval';
 
-          matchedUser = {
-            id: dbProfile.id,
-            name: dbProfile.name || name,
-            email: dbProfile.email,
-            gender: dbProfile.gender || 'Man',
-            age: dbProfile.age || 24,
-            city: dbProfile.location || 'New Delhi',
-            status: finalStatus,
-            is_verified: isVerified,
-            startsAt: mem?.starts_at || null,
-            expiresAt: mem?.expires_at || null,
-            plan: dbProfile.gender === 'Woman' ? 'Lifetime VIP Pass' : (mem?.plan_type ? formatPlanName(mem.plan_type, dbProfile.gender) : '1 Month VIP Pass'),
-            photos: dbProfile.photos && dbProfile.photos.length > 0 ? dbProfile.photos : [],
-            registered: dbProfile.created_at ? new Date(dbProfile.created_at).toLocaleDateString() : 'Today'
-          };
+            matchedUser = {
+              id: dbProfile.id,
+              name: dbProfile.name || name,
+              email: dbProfile.email,
+              gender: dbProfile.gender || 'Man',
+              age: dbProfile.age || 24,
+              city: dbProfile.location || 'New Delhi',
+              status: finalStatus,
+              is_verified: isVerified,
+              startsAt: mem?.starts_at || null,
+              expiresAt: mem?.expires_at || null,
+              plan: dbProfile.gender === 'Woman' ? 'Lifetime VIP Pass' : (mem?.plan_type ? formatPlanName(mem.plan_type, dbProfile.gender) : '1 Month VIP Pass'),
+              photos: dbProfile.photos && dbProfile.photos.length > 0 ? dbProfile.photos : [],
+              registered: dbProfile.created_at ? new Date(dbProfile.created_at).toLocaleDateString() : 'Today'
+            };
           }
+        } else {
+          // Profile does NOT exist in Supabase (Deleted by admin) -> purge from local storage
           try {
             const dbStr = localStorage.getItem('cufy_registered_users');
-            let dbUsers = dbStr ? JSON.parse(dbStr) : [];
-            dbUsers.unshift(matchedUser);
-            localStorage.setItem('cufy_registered_users', JSON.stringify(dbUsers));
+            if (dbStr) {
+              const dbUsers = JSON.parse(dbStr).filter(u => u.email && u.email.toLowerCase() !== email);
+              localStorage.setItem('cufy_registered_users', JSON.stringify(dbUsers));
+            }
           } catch (e) {}
         }
       } catch (e) {}
     }
+
+    // 3. Decision: If verified active in Supabase -> Login! If deleted or new -> Fresh Onboarding!
 
     // 4. Decision: If user exists in DB -> Direct Login! If new -> Start Onboarding with real info prefilled!
     if (matchedUser) {

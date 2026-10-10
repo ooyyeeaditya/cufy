@@ -81,6 +81,16 @@ export async function syncUserToCloud(record) {
   const rawEmail = (record.email || '').toLowerCase().trim();
   if (!rawEmail) return;
   const userEmail = sanitizeEmail(rawEmail);
+  
+  // Abort if user was marked deleted by admin
+  try {
+    const dStr = localStorage.getItem('cufy_deleted_users');
+    if (dStr && JSON.parse(dStr).includes(userEmail)) {
+      console.warn('[Sync] Skipping sync: User is deleted:', userEmail);
+      return;
+    }
+  } catch (e) {}
+
   const planDays = record.planDays || getPlanDurationDays(record.plan, record.gender);
   const planName = formatPlanName(record.plan || (record.gender === 'Woman' ? 'Lifetime VIP Pass' : '1 Month VIP Pass'), record.gender);
 
@@ -493,35 +503,48 @@ export async function fetchAllCloudUsers() {
     console.log('Supabase fetch note:', err);
   }
 
-  // Source C: LocalStorage database
-  try {
-    const localStr = localStorage.getItem('cufy_registered_users');
-    let deletedKeys = [];
+  // Source C: LocalStorage database (ONLY used as offline fallback if Supabase was completely unreachable)
+  if (profiles === null) {
     try {
-      const dStr = localStorage.getItem('cufy_deleted_users');
-      if (dStr) deletedKeys = JSON.parse(dStr);
-    } catch (e) {}
+      const localStr = localStorage.getItem('cufy_registered_users');
+      let deletedKeys = [];
+      try {
+        const dStr = localStorage.getItem('cufy_deleted_users');
+        if (dStr) deletedKeys = JSON.parse(dStr);
+      } catch (e) {}
 
-    if (localStr) {
-      const localUsers = JSON.parse(localStr);
-      localUsers.forEach(lu => {
-        const lEmail = (lu.email || '').toLowerCase().trim();
-        const lId = (lu.id || '').toString().replace(/^(pay_|usr_)/, '');
-        if (
-          lu.account_status === 'Deleted' || 
-          lu.status === 'deleted' || 
-          (lu.prompt2_answer && lu.prompt2_answer.startsWith('[DELETED]')) ||
-          lu.name === '[Deleted Account]' ||
-          deletedKeys.includes(lEmail) ||
-          deletedKeys.includes(lId)
-        ) return;
-        if (!cloudUsers.some(cu => cu.email && lu.email && cu.email.toLowerCase() === lEmail)) {
-          cloudUsers.unshift(lu);
-        }
-      });
+      if (localStr) {
+        const localUsers = JSON.parse(localStr);
+        localUsers.forEach(lu => {
+          const lEmail = (lu.email || '').toLowerCase().trim();
+          const lId = (lu.id || '').toString().replace(/^(pay_|usr_)/, '');
+          if (
+            lu.account_status === 'Deleted' || 
+            lu.status === 'deleted' || 
+            (lu.prompt2_answer && lu.prompt2_answer.startsWith('[DELETED]')) ||
+            lu.name === '[Deleted Account]' ||
+            deletedKeys.includes(lEmail) ||
+            deletedKeys.includes(lId)
+          ) return;
+          if (!cloudUsers.some(cu => cu.email && lu.email && cu.email.toLowerCase() === lEmail)) {
+            cloudUsers.unshift(lu);
+          }
+        });
+      }
+    } catch (err) {
+      console.log('Local merge note:', err);
     }
-  } catch (err) {
-    console.log('Local merge note:', err);
+  } else {
+    // Supabase is connected: Purge any deleted users from localStorage so stale cache never persists
+    try {
+      const validEmails = new Set(cloudUsers.map(cu => (cu.email || '').toLowerCase().trim()));
+      const localStr = localStorage.getItem('cufy_registered_users');
+      if (localStr) {
+        const localUsers = JSON.parse(localStr);
+        const filtered = localUsers.filter(lu => lu.email && validEmails.has(lu.email.toLowerCase().trim()));
+        localStorage.setItem('cufy_registered_users', JSON.stringify(filtered));
+      }
+    } catch (e) {}
   }
 
   // Strictly sort all users NEWEST to OLDEST (latest registration on top)
