@@ -124,8 +124,8 @@ const REVOKE_REASONS = [
   }
 ];
 
-// Helper: Real User DP Avatar (with initials fallback, never stock couple or unsplash photos)
-function UserAvatar({ user, size = 46, onClick }) {
+// Helper: Real User Avatar
+function UserAvatar({ user, size = 44, onClick }) {
   const [imgError, setImgError] = useState(false);
   const rawPhoto = user?.photos?.[0] || user?.photo;
   const photo = (rawPhoto && typeof rawPhoto === 'string' && !rawPhoto.includes('unsplash.com')) ? rawPhoto : null;
@@ -144,82 +144,57 @@ function UserAvatar({ user, size = 46, onClick }) {
       style={{
         width: `${size}px`,
         height: `${size}px`,
-        borderRadius: `${Math.round(size * 0.32)}px`,
+        borderRadius: '10px',
         overflow: 'hidden',
-        border: '1.5px solid #09090B',
+        border: '1px solid #E4E4E7',
         flexShrink: 0,
         cursor: onClick ? 'pointer' : 'default',
         position: 'relative',
-        background: 'linear-gradient(135deg, #18181B 0%, #27272A 100%)',
+        background: '#18181B',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         color: '#FFFFFF',
-        fontWeight: 900,
-        fontSize: `${size * 0.35}px`,
+        fontWeight: 700,
+        fontSize: `${size * 0.36}px`,
         letterSpacing: '0.5px'
       }}
     >
       {photo && !imgError ? (
         <img 
           src={photo} 
-          alt={user?.name || user?.userName || 'DP'} 
+          alt={user?.name || user?.userName || 'Avatar'} 
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           onError={() => setImgError(true)}
         />
       ) : (
         <span>{initials}</span>
       )}
-      <div style={{
-        position: 'absolute', bottom: 0, left: 0, right: 0,
-        background: 'rgba(9,9,11,0.72)', color: '#FFFFFF',
-        fontSize: '0.52rem', fontWeight: 800, textAlign: 'center', padding: '1px 0'
-      }}>
-        DP
-      </div>
     </div>
   );
 }
 
-// Helper: Payment Screenshot Thumbnail (with preview, zoom click, and free/missing status)
+// Helper: Payment Screenshot Thumbnail (clean minimal preview)
 function ScreenshotThumbnail({ pay, onClick }) {
   const [imgError, setImgError] = useState(false);
   const isWoman = pay?.gender === 'Woman';
   const url = pay?.screenshotUrl;
   const hasProof = Boolean(url && url.length > 5 && !url.includes('unsplash.com') && !imgError);
 
-  if (isWoman) {
-    return (
-      <div 
-        style={{
-          padding: '5px 8px',
-          borderRadius: '10px',
-          background: '#FDF2F8',
-          border: '1px solid #FBCFE8',
-          color: '#DB2777',
-          fontSize: '0.66rem',
-          fontWeight: 800,
-          whiteSpace: 'nowrap'
-        }}
-      >
-        Free Pass
-      </div>
-    );
-  }
+  if (isWoman) return null;
 
   return (
     <div 
       onClick={hasProof ? onClick : undefined}
-      title={hasProof ? "Click to view full payment screenshot" : "No screenshot uploaded"}
+      title={hasProof ? "View payment receipt" : "No receipt attached"}
       style={{
-        width: '44px',
-        height: '48px',
-        borderRadius: '12px',
+        width: '40px',
+        height: '40px',
+        borderRadius: '8px',
         overflow: 'hidden',
-        border: hasProof ? '1.5px solid #09090B' : '1.5px dashed #DC2626',
+        border: hasProof ? '1px solid #E4E4E7' : '1px dashed #CBD5E1',
         cursor: hasProof ? 'pointer' : 'default',
-        position: 'relative',
-        background: hasProof ? '#09090B' : '#FEF2F2',
+        background: hasProof ? '#F8FAFC' : '#F1F5F9',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -234,19 +209,7 @@ function ScreenshotThumbnail({ pay, onClick }) {
           onError={() => setImgError(true)}
         />
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-          <Camera size={13} color="#DC2626" />
-          <span style={{ fontSize: '0.48rem', fontWeight: 900, color: '#DC2626' }}>NO SS</span>
-        </div>
-      )}
-      {hasProof && (
-        <span style={{
-          position: 'absolute', bottom: '1px', left: 0, right: 0,
-          background: 'rgba(9,9,11,0.85)', color: '#FFFFFF',
-          fontSize: '0.52rem', fontWeight: 900, textAlign: 'center', padding: '1px'
-        }}>
-          SS
-        </span>
+        <Camera size={13} color="#94A3B8" />
       )}
     </div>
   );
@@ -472,7 +435,7 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
     setSyncMsg('');
     try {
       const count = await backfillAllUsersToSupabase();
-      setSyncMsg(`✅ Synced ${count} accounts with Supabase Auth & Profiles!`);
+      setSyncMsg(`Synced ${count} accounts with Supabase Auth & Profiles`);
       setTimeout(() => setSyncMsg(''), 5000);
     } catch (err) {
       setSyncMsg('Sync note: ' + err.message);
@@ -603,39 +566,44 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
   // APPROVE PAYMENT / USER
   const handleApprovePayment = async (id, customDays = null) => {
     const targetPay = pendingPayments.find(p => p.id === id || p.userId === id);
-    if (!targetPay) return;
+    const targetUser = usersList.find(u => u.id === id || `pay_${u.id}` === id || (targetPay?.userEmail && u.email?.toLowerCase() === targetPay.userEmail.toLowerCase()));
 
-    const targetUserId = targetPay.userId;
-    const targetEmail = targetPay.userEmail;
-    const planDays = customDays || targetPay.planDays || getPlanDurationDays(targetPay.planName);
+    const targetUserId = targetPay?.userId || targetUser?.id || (typeof id === 'string' && id.startsWith('pay_') ? id.replace('pay_', '') : id);
+    const targetEmail = targetPay?.userEmail || targetUser?.email;
+    const userName = targetPay?.userName || targetUser?.name || 'Member';
+    const planName = targetPay?.planName || targetUser?.plan || 'VIP Pass';
+    const planDays = customDays || targetPay?.planDays || targetUser?.planDays || getPlanDurationDays(planName);
 
-    setPendingPayments(prev => prev.map(p => p.id === targetPay.id ? { ...p, status: 'approved' } : p));
+    if (!targetUserId && !targetEmail) return;
+
+    // Optimistically update both pendingPayments and usersList in memory immediately
+    setPendingPayments(prev => prev.map(p => (p.id === id || p.userId === targetUserId || (targetEmail && p.userEmail?.toLowerCase() === targetEmail.toLowerCase())) ? { ...p, status: 'approved' } : p));
+    setUsersList(prev => prev.map(u => (u.id === targetUserId || (targetEmail && u.email && u.email.toLowerCase() === targetEmail.toLowerCase())) ? { ...u, status: 'approved', is_verified: true } : u));
     
     try {
       await updateCloudUserStatus(targetUserId, targetEmail, 'approved', {
-        planName: targetPay.planName,
+        planName,
         planDays
       });
       
-      const refreshed = await fetchAllCloudUsers();
-      setUsersList(refreshed);
+      await loadUsers();
     } catch (e) {
       console.error('Approve payment error:', e);
     }
 
     if ('Notification' in window && Notification.permission === 'granted') {
       try {
-        new Notification('🎉 Account Approved!', {
-          body: `${targetPay.userName}'s ${planDays}-day plan is active!`,
+        new Notification('Account Approved', {
+          body: `${userName}'s plan is active`,
           icon: '/photos/cufylogo.jpg'
         });
       } catch (err) {}
     }
 
-    if (selectedProfileUser?.id === targetUserId) {
+    if (selectedProfileUser?.id === targetUserId || (targetEmail && selectedProfileUser?.email?.toLowerCase() === targetEmail.toLowerCase())) {
       setSelectedProfileUser(prev => prev ? { ...prev, status: 'approved' } : null);
     }
-    if (screenshotUserContext?.id === targetUserId) {
+    if (screenshotUserContext?.id === targetUserId || (targetEmail && screenshotUserContext?.userEmail?.toLowerCase() === targetEmail.toLowerCase())) {
       setScreenshotUserContext(prev => prev ? { ...prev, status: 'approved' } : null);
     }
   };
@@ -667,8 +635,7 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
       await updateCloudUserStatus(targetPay.userId, targetPay.userEmail, 'rejected', {
         rejectionReason: finalReason
       });
-      const refreshed = await fetchAllCloudUsers();
-      setUsersList(refreshed);
+      await loadUsers();
     } catch (e) {
       console.error('Reject payment error:', e);
     }
@@ -856,8 +823,8 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
           flex: 1, display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center', padding: '24px'
         }}>
-          <button onClick={onClose} style={{ position: 'absolute', top: '20px', right: '20px', padding: '10px', background: '#FFFFFF', borderRadius: '50%', color: '#09090B', border: '1px solid #E4E4E7', cursor: 'pointer' }}>
-            ✕
+          <button onClick={onClose} style={{ position: 'absolute', top: '20px', right: '20px', padding: '10px', background: '#FFFFFF', borderRadius: '50%', color: '#09090B', border: '1px solid #E4E4E7', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <X size={16} />
           </button>
 
           <div style={{ width: '100%', maxWidth: '360px', background: '#FFFFFF', borderRadius: '28px', padding: '32px 24px', border: '1.5px solid #E4E4E7', boxShadow: '0 16px 40px rgba(0,0,0,0.06)' }}>
@@ -955,7 +922,7 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
             </div>
           )}
 
-          {/* Clean Spacious Header */}
+          {/* Clean Executive Header */}
           <div style={{
             padding: '14px 20px',
             display: 'flex',
@@ -966,170 +933,158 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
             zIndex: 10
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '1.45rem', fontWeight: 900, fontFamily: 'serif', fontStyle: 'italic', color: '#09090B' }}>
-                cufy<span style={{ color: '#FF3B30', fontStyle: 'normal' }}>.</span>
+              <span style={{ fontSize: '1.05rem', fontWeight: 900, letterSpacing: '-0.3px', color: '#09090B' }}>
+                CUFY
               </span>
-              <span style={{ fontSize: '0.72rem', fontWeight: 900, background: '#09090B', color: '#FFFFFF', padding: '3px 8px', borderRadius: '8px' }}>
-                PRO
+              <span style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.5px', background: '#F4F4F5', color: '#52525B', padding: '3px 8px', borderRadius: '6px', textTransform: 'uppercase' }}>
+                Console
               </span>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <button onClick={handleManualRefresh} style={{ padding: '7px 12px', background: '#F4F4F5', borderRadius: '12px', fontSize: '0.78rem', fontWeight: 800, color: '#09090B', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
-                Refresh
+              <button onClick={handleManualRefresh} style={{ padding: '6px 12px', background: '#F4F4F5', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 600, color: '#09090B', border: '1px solid #E4E4E7', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
+                Sync
               </button>
-              <button onClick={() => setIsAuthenticated(false)} style={{ padding: '7px 12px', background: '#F4F4F5', borderRadius: '12px', fontSize: '0.78rem', fontWeight: 800, color: '#09090B', border: 'none', cursor: 'pointer' }}>
-                Log out
+              <button onClick={() => setIsAuthenticated(false)} style={{ padding: '6px 12px', background: '#FFFFFF', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 600, color: '#71717A', border: '1px solid #E4E4E7', cursor: 'pointer' }}>
+                Sign out
               </button>
-              <button onClick={onClose} style={{ padding: '7px', background: '#F4F4F5', borderRadius: '50%', color: '#09090B', border: 'none', cursor: 'pointer' }}>
-                ✕
+              <button onClick={onClose} style={{ width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F4F4F5', borderRadius: '8px', color: '#71717A', border: 'none', cursor: 'pointer' }}>
+                <X size={14} />
               </button>
             </div>
           </div>
 
           {/* Quick Metrics Strip */}
-          <div style={{ padding: '12px 18px 6px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
+          <div style={{ padding: '12px 18px 4px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
             {/* Total Collected Revenue */}
             <div style={{
               background: '#FFFFFF',
               padding: '12px 14px',
-              borderRadius: '20px',
-              border: '1.5px solid #E4E4E7',
-              boxShadow: '0 2px 10px rgba(0,0,0,0.02)'
+              borderRadius: '12px',
+              border: '1px solid #E4E4E7'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#71717A', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                  Total Collected
-                </span>
-                <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#ECFDF5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <TrendingUp size={12} color="#059669" />
-                </span>
+              <div style={{ fontSize: '0.66rem', fontWeight: 700, color: '#71717A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Total Revenue
               </div>
-              <div style={{ fontSize: '1.45rem', fontWeight: 900, color: '#059669', marginTop: '2px', letterSpacing: '-0.5px' }}>
+              <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#09090B', marginTop: '3px', letterSpacing: '-0.3px' }}>
                 ₹{financialStats.totalRevenue.toLocaleString()}
               </div>
-              <div style={{ fontSize: '0.7rem', color: '#71717A', fontWeight: 700, marginTop: '2px' }}>
+              <div style={{ fontSize: '0.7rem', color: '#71717A', fontWeight: 500, marginTop: '2px' }}>
                 {activeUsers.length} active member{activeUsers.length !== 1 ? 's' : ''}
               </div>
             </div>
 
-            {/* This Month's Revenue */}
+            {/* This Month's Revenue / Pipeline */}
             <div style={{
               background: '#FFFFFF',
               padding: '12px 14px',
-              borderRadius: '20px',
-              border: '1.5px solid #E4E4E7',
-              boxShadow: '0 2px 10px rgba(0,0,0,0.02)'
+              borderRadius: '12px',
+              border: '1px solid #E4E4E7'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#71717A', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                  This Month
-                </span>
-                <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Calendar size={12} color="#4F46E5" />
-                </span>
+              <div style={{ fontSize: '0.66rem', fontWeight: 700, color: '#71717A', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Pending Pipeline
               </div>
-              <div style={{ fontSize: '1.45rem', fontWeight: 900, color: '#4F46E5', marginTop: '2px', letterSpacing: '-0.5px' }}>
-                ₹{financialStats.thisMonthRevenue.toLocaleString()}
+              <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#09090B', marginTop: '3px', letterSpacing: '-0.3px' }}>
+                ₹{financialStats.pendingRevenue.toLocaleString()}
               </div>
-              <div style={{ fontSize: '0.7rem', color: '#71717A', fontWeight: 700, marginTop: '2px' }}>
-                Pipeline: ₹{financialStats.pendingRevenue.toLocaleString()} ({pendingVerifications.length} pending)
+              <div style={{ fontSize: '0.7rem', color: '#71717A', fontWeight: 500, marginTop: '2px' }}>
+                {pendingVerifications.length} in verification queue
               </div>
             </div>
           </div>
 
-          {/* MAIN CATEGORY TABS - SPACIOUS HORIZONTAL NAVIGATION */}
+          {/* MAIN CATEGORY TABS - SPACIOUS HORIZONTAL NAVIGATION (ZERO EMOJIS) */}
           <div style={{ padding: '8px 18px', display: 'flex', gap: '8px', overflowX: 'auto', scrollbarWidth: 'none' }}>
             <button 
               onClick={() => setActiveTab('verifications')}
               style={{
-                padding: '8px 14px', borderRadius: '12px',
+                padding: '8px 14px', borderRadius: '10px',
                 background: activeTab === 'verifications' ? '#09090B' : '#FFFFFF',
                 color: activeTab === 'verifications' ? '#FFFFFF' : '#71717A',
-                fontWeight: 800, fontSize: '0.78rem', border: '1px solid #E4E4E7', whiteSpace: 'nowrap', cursor: 'pointer',
+                fontWeight: 700, fontSize: '0.76rem', border: '1px solid #E4E4E7', whiteSpace: 'nowrap', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: '6px'
               }}
             >
-              <span>🛡️ Pending ({pendingVerifications.length})</span>
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('boosts')}
-              style={{
-                padding: '8px 14px', borderRadius: '12px',
-                background: activeTab === 'boosts' ? '#09090B' : '#FFFFFF',
-                color: activeTab === 'boosts' ? '#FFFFFF' : '#71717A',
-                fontWeight: 800, fontSize: '0.78rem', border: '1px solid #E4E4E7', whiteSpace: 'nowrap', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: '6px'
-              }}
-            >
-              <span>⚡ Boost Requests ({boostRequests.filter(b => b.status === 'pending').length})</span>
+              <span>Pending ({pendingVerifications.length})</span>
             </button>
 
             <button 
               onClick={() => setActiveTab('active')}
               style={{
-                padding: '8px 14px', borderRadius: '12px',
+                padding: '8px 14px', borderRadius: '10px',
                 background: activeTab === 'active' ? '#09090B' : '#FFFFFF',
                 color: activeTab === 'active' ? '#FFFFFF' : '#71717A',
-                fontWeight: 800, fontSize: '0.78rem', border: '1px solid #E4E4E7', whiteSpace: 'nowrap', cursor: 'pointer',
+                fontWeight: 700, fontSize: '0.76rem', border: '1px solid #E4E4E7', whiteSpace: 'nowrap', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: '6px'
               }}
             >
-              <span>🟢 Active Users ({activeUsers.length})</span>
+              <span>Active ({activeUsers.length})</span>
+            </button>
+
+            <button 
+              onClick={() => setActiveTab('boosts')}
+              style={{
+                padding: '8px 14px', borderRadius: '10px',
+                background: activeTab === 'boosts' ? '#09090B' : '#FFFFFF',
+                color: activeTab === 'boosts' ? '#FFFFFF' : '#71717A',
+                fontWeight: 700, fontSize: '0.76rem', border: '1px solid #E4E4E7', whiteSpace: 'nowrap', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '6px'
+              }}
+            >
+              <span>Boosts ({boostRequests.filter(b => b.status === 'pending').length})</span>
             </button>
 
             <button 
               onClick={() => setActiveTab('rejected')}
               style={{
-                padding: '8px 14px', borderRadius: '12px',
+                padding: '8px 14px', borderRadius: '10px',
                 background: activeTab === 'rejected' ? '#09090B' : '#FFFFFF',
                 color: activeTab === 'rejected' ? '#FFFFFF' : '#71717A',
-                fontWeight: 800, fontSize: '0.78rem', border: '1px solid #E4E4E7', whiteSpace: 'nowrap', cursor: 'pointer',
+                fontWeight: 700, fontSize: '0.76rem', border: '1px solid #E4E4E7', whiteSpace: 'nowrap', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: '6px'
               }}
             >
-              <span>🚫 Rejected ({rejectedProfiles.length})</span>
+              <span>Rejected ({rejectedProfiles.length})</span>
             </button>
 
             <button 
               onClick={() => setActiveTab('expired')}
               style={{
-                padding: '8px 14px', borderRadius: '12px',
+                padding: '8px 14px', borderRadius: '10px',
                 background: activeTab === 'expired' ? '#09090B' : '#FFFFFF',
                 color: activeTab === 'expired' ? '#FFFFFF' : '#71717A',
-                fontWeight: 800, fontSize: '0.78rem', border: '1px solid #E4E4E7', whiteSpace: 'nowrap', cursor: 'pointer',
+                fontWeight: 700, fontSize: '0.76rem', border: '1px solid #E4E4E7', whiteSpace: 'nowrap', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: '6px'
               }}
             >
-              <span>⏳ Expired ({expiredList.length})</span>
+              <span>Expired ({expiredList.length})</span>
             </button>
 
             <button 
               onClick={() => setActiveTab('users')}
               style={{
-                padding: '8px 14px', borderRadius: '12px',
+                padding: '8px 14px', borderRadius: '10px',
                 background: activeTab === 'users' ? '#09090B' : '#FFFFFF',
                 color: activeTab === 'users' ? '#FFFFFF' : '#71717A',
-                fontWeight: 800, fontSize: '0.78rem', border: '1px solid #E4E4E7', whiteSpace: 'nowrap', cursor: 'pointer',
+                fontWeight: 700, fontSize: '0.76rem', border: '1px solid #E4E4E7', whiteSpace: 'nowrap', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: '6px'
               }}
             >
-              <span>👥 All Accounts ({usersList.length})</span>
+              <span>All Users ({usersList.length})</span>
             </button>
 
             <button 
               onClick={() => setActiveTab('financials')}
               style={{
-                padding: '8px 14px', borderRadius: '12px',
+                padding: '8px 14px', borderRadius: '10px',
                 background: activeTab === 'financials' ? '#09090B' : '#FFFFFF',
                 color: activeTab === 'financials' ? '#FFFFFF' : '#71717A',
-                fontWeight: 800, fontSize: '0.78rem', border: '1px solid #E4E4E7', whiteSpace: 'nowrap', cursor: 'pointer',
+                fontWeight: 700, fontSize: '0.76rem', border: '1px solid #E4E4E7', whiteSpace: 'nowrap', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: '6px'
               }}
             >
-              <span>📊 Financials</span>
+              <span>Financials</span>
             </button>
           </div>
 
@@ -1142,35 +1097,35 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
             {activeTab === 'verifications' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 
-                {/* 2 Sub-Sections: Men (Paid) vs Women (Free) */}
-                <div style={{ display: 'flex', gap: '6px', background: '#E4E4E7', padding: '3px', borderRadius: '14px' }}>
+                {/* Clean Sub-Tabs: Men vs Women */}
+                <div style={{ display: 'flex', gap: '6px', background: '#F4F4F5', padding: '3px', borderRadius: '10px' }}>
                   <button
                     onClick={() => setVerifGenderTab('men')}
                     style={{
                       flex: 1,
                       padding: '7px 12px',
-                      borderRadius: '11px',
+                      borderRadius: '8px',
                       border: 'none',
                       background: verifGenderTab === 'men' ? '#FFFFFF' : 'transparent',
                       color: verifGenderTab === 'men' ? '#09090B' : '#71717A',
-                      fontWeight: 800,
-                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      fontSize: '0.76rem',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '6px',
-                      boxShadow: verifGenderTab === 'men' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none'
+                      boxShadow: verifGenderTab === 'men' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none'
                     }}
                   >
-                    <span>Men (Paid Queue)</span>
+                    <span>Men</span>
                     <span style={{
-                      background: verifGenderTab === 'men' ? '#FF3B30' : '#A1A1AA',
-                      color: '#FFFFFF',
+                      background: verifGenderTab === 'men' ? '#09090B' : '#E4E4E7',
+                      color: verifGenderTab === 'men' ? '#FFFFFF' : '#71717A',
                       fontSize: '0.65rem',
                       padding: '1px 6px',
                       borderRadius: '999px',
-                      fontWeight: 900
+                      fontWeight: 800
                     }}>
                       {menPendingVerifications.length}
                     </span>
@@ -1181,28 +1136,28 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                     style={{
                       flex: 1,
                       padding: '7px 12px',
-                      borderRadius: '11px',
+                      borderRadius: '8px',
                       border: 'none',
                       background: verifGenderTab === 'women' ? '#FFFFFF' : 'transparent',
                       color: verifGenderTab === 'women' ? '#09090B' : '#71717A',
-                      fontWeight: 800,
-                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      fontSize: '0.76rem',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '6px',
-                      boxShadow: verifGenderTab === 'women' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none'
+                      boxShadow: verifGenderTab === 'women' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none'
                     }}
                   >
-                    <span>Women (Free Queue)</span>
+                    <span>Women</span>
                     <span style={{
-                      background: verifGenderTab === 'women' ? '#059669' : '#A1A1AA',
-                      color: '#FFFFFF',
+                      background: verifGenderTab === 'women' ? '#09090B' : '#E4E4E7',
+                      color: verifGenderTab === 'women' ? '#FFFFFF' : '#71717A',
                       fontSize: '0.65rem',
                       padding: '1px 6px',
                       borderRadius: '999px',
-                      fontWeight: 900
+                      fontWeight: 800
                     }}>
                       {womenPendingVerifications.length}
                     </span>
@@ -1211,23 +1166,21 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
 
                 {/* --- A. MEN'S PENDING VERIFICATION QUEUE --- */}
                 {verifGenderTab === 'men' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {menPendingVerifications.length === 0 ? (
                       <div style={{
                         background: '#FFFFFF',
-                        borderRadius: '24px',
-                        padding: '44px 20px',
+                        borderRadius: '12px',
+                        padding: '36px 20px',
                         textAlign: 'center',
-                        border: '1.5px dashed #D4D4D8'
+                        border: '1px solid #E4E4E7'
                       }}>
-                        <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#ECFDF5', margin: '0 auto 12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <CheckCircle2 size={24} color="#059669" />
+                        <CheckCircle2 size={24} color="#71717A" style={{ margin: '0 auto 8px' }} />
+                        <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#09090B' }}>
+                          No Pending Men
                         </div>
-                        <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#09090B' }}>
-                          All Caught Up!
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: '#71717A', marginTop: '4px', maxWidth: '280px', margin: '4px auto 0' }}>
-                          No pending male payments in queue. Approved users are in the <b>Active Users</b> tab.
+                        <div style={{ fontSize: '0.78rem', color: '#71717A', marginTop: '2px' }}>
+                          All male applications have been processed.
                         </div>
                       </div>
                     ) : (
@@ -1236,54 +1189,49 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                           key={pay.id} 
                           style={{
                             background: '#FFFFFF',
-                            borderRadius: '22px',
-                            padding: '14px 16px',
-                            border: '2px solid #FF3B30',
-                            boxShadow: '0 4px 16px rgba(0,0,0,0.02)',
+                            borderRadius: '12px',
+                            padding: '12px 14px',
+                            border: '1px solid #E4E4E7',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
                             gap: '12px'
                           }}
                         >
-                          {/* Real User DP Avatar */}
-                          <UserAvatar user={pay} size={48} onClick={() => setSelectedProfileUser(pay)} />
+                          <UserAvatar user={pay} size={44} onClick={() => setSelectedProfileUser(pay)} />
 
-                          {/* Minimal Clean Info */}
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <span 
                                 onClick={() => setSelectedProfileUser(pay)}
-                                style={{ fontSize: '0.96rem', fontWeight: 900, color: '#09090B', cursor: 'pointer' }}
+                                style={{ fontSize: '0.92rem', fontWeight: 700, color: '#09090B', cursor: 'pointer' }}
                               >
                                 {pay.userName}, {pay.age}
                               </span>
-                              <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#71717A', background: '#F4F4F5', padding: '1px 6px', borderRadius: '6px' }}>
+                              <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#71717A', background: '#F4F4F5', padding: '1px 5px', borderRadius: '4px' }}>
                                 {pay.gender}
                               </span>
                             </div>
 
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', flexWrap: 'wrap' }}>
-                              {/* Simplified Plan Badge */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px', flexWrap: 'wrap' }}>
                               <span style={{
-                                fontSize: '0.72rem',
-                                fontWeight: 800,
-                                background: '#FEF2F2',
-                                color: '#DC2626',
-                                padding: '2px 8px',
-                                borderRadius: '6px'
+                                fontSize: '0.7rem',
+                                fontWeight: 600,
+                                background: '#F4F4F5',
+                                color: '#3F3F46',
+                                padding: '1px 6px',
+                                borderRadius: '4px'
                               }}>
                                 {getSimplifiedPlanBadge(pay.planName, pay.amount, pay.gender)}
                               </span>
 
-                              <span style={{ fontSize: '0.68rem', color: '#A1A1AA', fontWeight: 600 }}>
-                                {pay.timestamp}
+                              <span style={{ fontSize: '0.68rem', color: '#71717A' }}>
+                                {pay.city} · {pay.timestamp}
                               </span>
                             </div>
                           </div>
 
-                          {/* Right: Payment Screenshot Thumbnail + Action Buttons */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                             <ScreenshotThumbnail 
                               pay={pay} 
                               onClick={() => {
@@ -1292,49 +1240,47 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                               }} 
                             />
 
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              {/* Reject Button -> Opens Rejection Modal */}
-                              <button
-                                onClick={() => handleOpenRejectionModal(pay)}
-                                title="Reject Verification"
-                                style={{
-                                  width: '38px', height: '38px',
-                                  borderRadius: '50%',
-                                  background: '#FEE2E2',
-                                  color: '#DC2626',
-                                  border: 'none',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  cursor: 'pointer',
-                                  boxShadow: '0 2px 6px rgba(220,38,38,0.15)',
-                                  transition: 'all 0.15s ease'
-                                }}
-                              >
-                                <X size={18} strokeWidth={2.6} />
-                              </button>
+                            <button
+                              onClick={() => handleOpenRejectionModal(pay)}
+                              title="Reject"
+                              style={{
+                                padding: '6px 10px',
+                                borderRadius: '7px',
+                                background: '#FFFFFF',
+                                color: '#DC2626',
+                                border: '1px solid #FCA5A5',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <X size={13} />
+                              Reject
+                            </button>
 
-                              {/* Approve Button -> Approves immediately */}
-                              <button
-                                onClick={() => handleApprovePayment(pay.id)}
-                                title={`Approve Payment & Start ${pay.planDays}d Plan`}
-                                style={{
-                                  width: '38px', height: '38px',
-                                  borderRadius: '50%',
-                                  background: '#10B981',
-                                  color: '#FFFFFF',
-                                  border: 'none',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  cursor: 'pointer',
-                                  boxShadow: '0 2px 8px rgba(16,185,129,0.3)',
-                                  transition: 'all 0.15s ease'
-                                }}
-                              >
-                                <Check size={20} strokeWidth={3} />
-                              </button>
-                            </div>
+                            <button
+                              onClick={() => handleApprovePayment(pay.id)}
+                              title="Approve"
+                              style={{
+                                padding: '6px 12px',
+                                borderRadius: '7px',
+                                background: '#09090B',
+                                color: '#FFFFFF',
+                                border: 'none',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <Check size={13} />
+                              Approve
+                            </button>
                           </div>
                         </div>
                       ))
@@ -1344,23 +1290,21 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
 
                 {/* --- B. WOMEN'S PENDING VERIFICATION QUEUE --- */}
                 {verifGenderTab === 'women' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {womenPendingVerifications.length === 0 ? (
                       <div style={{
                         background: '#FFFFFF',
-                        borderRadius: '24px',
-                        padding: '44px 20px',
+                        borderRadius: '12px',
+                        padding: '36px 20px',
                         textAlign: 'center',
-                        border: '1.5px dashed #D4D4D8'
+                        border: '1px solid #E4E4E7'
                       }}>
-                        <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#FDF2F8', margin: '0 auto 12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <Heart size={24} color="#DB2777" />
+                        <CheckCircle2 size={24} color="#71717A" style={{ margin: '0 auto 8px' }} />
+                        <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#09090B' }}>
+                          No Pending Women
                         </div>
-                        <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#09090B' }}>
-                          No Pending Female Profiles
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: '#71717A', marginTop: '4px' }}>
-                          Female profiles are automatically approved and listed under Active Users.
+                        <div style={{ fontSize: '0.78rem', color: '#71717A', marginTop: '2px' }}>
+                          All female profiles are reviewed. Active accounts are in the Active tab.
                         </div>
                       </div>
                     ) : (
@@ -1369,52 +1313,88 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                           key={girl.id} 
                           style={{
                             background: '#FFFFFF',
-                            borderRadius: '22px',
-                            padding: '14px 16px',
-                            border: '1.5px solid #E4E4E7',
+                            borderRadius: '12px',
+                            padding: '12px 14px',
+                            border: '1px solid #E4E4E7',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
                             gap: '12px'
                           }}
                         >
-                          <UserAvatar user={girl} size={48} onClick={() => setSelectedProfileUser(girl)} />
+                          <UserAvatar user={girl} size={44} onClick={() => setSelectedProfileUser(girl)} />
 
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ fontSize: '0.96rem', fontWeight: 900, color: '#09090B' }}>
+                              <span 
+                                onClick={() => setSelectedProfileUser(girl)}
+                                style={{ fontSize: '0.92rem', fontWeight: 700, color: '#09090B', cursor: 'pointer' }}
+                              >
                                 {girl.userName}, {girl.age}
                               </span>
-                              <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#DB2777', background: '#FDF2F8', padding: '1px 6px', borderRadius: '6px' }}>
+                              <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#71717A', background: '#F4F4F5', padding: '1px 5px', borderRadius: '4px' }}>
                                 Woman
                               </span>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px' }}>
                               <span style={{
-                                fontSize: '0.72rem',
-                                fontWeight: 800,
-                                background: '#FDF2F8',
-                                color: '#DB2777',
-                                padding: '2px 8px',
-                                borderRadius: '6px'
+                                fontSize: '0.7rem',
+                                fontWeight: 600,
+                                background: '#F4F4F5',
+                                color: '#3F3F46',
+                                padding: '1px 6px',
+                                borderRadius: '4px'
                               }}>
-                                Free (Women)
+                                VIP Pass (Free)
+                              </span>
+                              <span style={{ fontSize: '0.68rem', color: '#71717A' }}>
+                                {girl.city} · {girl.timestamp}
                               </span>
                             </div>
                           </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                             <button
                               onClick={() => handleOpenRejectionModal(girl)}
-                              style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#FEE2E2', color: '#DC2626', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                              title="Reject"
+                              style={{
+                                padding: '6px 10px',
+                                borderRadius: '7px',
+                                background: '#FFFFFF',
+                                color: '#DC2626',
+                                border: '1px solid #FCA5A5',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                cursor: 'pointer'
+                              }}
                             >
-                              <X size={16} />
+                              <X size={13} />
+                              Reject
                             </button>
+
                             <button
                               onClick={() => handleApprovePayment(girl.id, 365)}
-                              style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#10B981', color: '#FFFFFF', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                              title="Approve"
+                              style={{
+                                padding: '6px 12px',
+                                borderRadius: '7px',
+                                background: '#09090B',
+                                color: '#FFFFFF',
+                                border: 'none',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                cursor: 'pointer'
+                              }}
                             >
-                              <Check size={18} />
+                              <Check size={13} />
+                              Approve
                             </button>
                           </div>
                         </div>
@@ -1532,12 +1512,12 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                             </span>
 
                             {rem && !rem.expired ? (
-                              <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 800 }}>
-                                ⏳ Active: {rem.text}
+                              <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 600 }}>
+                                Active: {rem.text}
                               </span>
                             ) : (
-                              <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 800 }}>
-                                ⏳ Active
+                              <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 600 }}>
+                                Active
                               </span>
                             )}
                           </div>
@@ -1674,7 +1654,7 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                           borderRadius: '8px',
                           display: 'inline-block'
                         }}>
-                          ✕ {user.rejectionReason || 'Verification rejected by administrator'}
+                          {user.rejectionReason || 'Verification rejected by administrator'}
                         </div>
                       </div>
 
@@ -2060,7 +2040,7 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <div style={{ fontSize: '0.96rem', fontWeight: 900, color: '#09090B' }}>
-                      Profile Boost Requests ⚡
+                      Profile Boost Requests
                     </div>
                     <div style={{ fontSize: '0.76rem', color: '#71717A', fontWeight: 600 }}>
                       Review payment receipts and approve profile boosts for members
@@ -2108,17 +2088,17 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                             <span style={{ fontSize: '0.98rem', fontWeight: 900, color: '#09090B' }}>
                               {boost.userName || boost.name || 'Member'}
                             </span>
-                            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#D97706', background: '#FEF3C7', padding: '2px 8px', borderRadius: '8px' }}>
-                              ⚡ {boost.pack} ({boost.price})
+                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#09090B', background: '#F4F4F5', padding: '2px 8px', borderRadius: '6px' }}>
+                              {boost.pack} ({boost.price})
                             </span>
                           </div>
 
-                          <div style={{ fontSize: '0.76rem', color: '#71717A', marginTop: '4px', fontWeight: 600 }}>
-                            {boost.userEmail || boost.email} • {boost.userPhone || boost.phone || 'No phone'}
+                          <div style={{ fontSize: '0.76rem', color: '#71717A', marginTop: '4px', fontWeight: 500 }}>
+                            {boost.userEmail || boost.email} · {boost.userPhone || boost.phone || 'No phone'}
                           </div>
 
-                          <div style={{ fontSize: '0.7rem', color: '#A1A1AA', marginTop: '2px', fontWeight: 600 }}>
-                            Submitted: {boost.timestamp ? new Date(boost.timestamp).toLocaleString() : 'Recently'}
+                          <div style={{ fontSize: '0.7rem', color: '#A1A1AA', marginTop: '2px' }}>
+                            {boost.timestamp ? new Date(boost.timestamp).toLocaleDateString() : 'Recently'}
                           </div>
                         </div>
 
@@ -2131,48 +2111,44 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                                 setScreenshotUserContext({ userName: boost.userName || boost.name, planName: boost.pack, amount: boost.price });
                               }}
                               style={{
-                                width: '46px', height: '52px', borderRadius: '12px', overflow: 'hidden', border: '1.5px solid #09090B', cursor: 'pointer', position: 'relative'
+                                width: '40px', height: '40px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E4E4E7', cursor: 'pointer', position: 'relative'
                               }}
-                              title="Click to expand payment screenshot"
+                              title="View receipt"
                             >
                               <img src={boost.screenshotUrl} alt="Receipt" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              <span style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(9,9,11,0.85)', color: '#FFF', fontSize: '0.5rem', fontWeight: 900, textAlign: 'center' }}>
-                                SS
-                              </span>
                             </div>
-                          ) : (
-                            <div style={{ fontSize: '0.7rem', color: '#DC2626', fontWeight: 800 }}>No Receipt</div>
-                          )}
+                          ) : null}
 
                           {isPending ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <button
                                 onClick={() => handleRejectBoost(boost.id)}
                                 style={{
-                                  width: '38px', height: '38px', borderRadius: '50%', background: '#FEE2E2', color: '#DC2626', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                  padding: '6px 10px', borderRadius: '7px', background: '#FFFFFF', color: '#DC2626', border: '1px solid #FCA5A5', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px'
                                 }}
-                                title="Reject Boost Request"
+                                title="Reject"
                               >
-                                <X size={18} strokeWidth={2.6} />
+                                <X size={13} />
+                                Reject
                               </button>
                               <button
                                 onClick={() => handleApproveBoost(boost.id)}
                                 style={{
-                                  padding: '8px 14px', borderRadius: '12px', background: '#10B981', color: '#FFFFFF', border: 'none', fontWeight: 900, fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', boxShadow: '0 2px 8px rgba(16,185,129,0.3)'
+                                  padding: '6px 12px', borderRadius: '7px', background: '#09090B', color: '#FFFFFF', border: 'none', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px'
                                 }}
-                                title="Approve Boost & Grant 24h Boost"
+                                title="Approve"
                               >
-                                <Zap size={14} fill="#FFFFFF" />
+                                <Check size={13} />
                                 Approve
                               </button>
                             </div>
                           ) : isApproved ? (
-                            <span style={{ fontSize: '0.78rem', fontWeight: 900, color: '#059669', background: '#ECFDF5', padding: '6px 12px', borderRadius: '10px' }}>
-                              ✅ Boost Active
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#059669', background: '#ECFDF5', padding: '4px 10px', borderRadius: '6px' }}>
+                              Boost Active
                             </span>
                           ) : (
-                            <span style={{ fontSize: '0.78rem', fontWeight: 900, color: '#DC2626', background: '#FEF2F2', padding: '6px 12px', borderRadius: '10px' }}>
-                              ✕ Rejected
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#DC2626', background: '#FEF2F2', padding: '4px 10px', borderRadius: '6px' }}>
+                              Rejected
                             </span>
                           )}
                         </div>
@@ -2185,9 +2161,7 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
 
           </div>
 
-          {/* =========================================================================
-              MODAL 1: VERIFICATION REJECTION MODAL (POPS UP ON CROSS ✕ CLICK)
-              ========================================================================= */}
+          {/* MODAL 1: VERIFICATION REJECTION MODAL */}
           {rejectionTarget && (
             <div 
               style={{
@@ -2418,17 +2392,16 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                     style={{
                       flex: 1,
                       padding: '8px',
-                      borderRadius: '10px',
+                      borderRadius: '8px',
                       border: 'none',
                       background: deleteMode === 'permanent' ? '#DC2626' : 'transparent',
                       color: deleteMode === 'permanent' ? '#FFFFFF' : '#71717A',
-                      fontWeight: 800,
+                      fontWeight: 700,
                       fontSize: '0.74rem',
-                      cursor: 'pointer',
-                      boxShadow: deleteMode === 'permanent' ? '0 2px 6px rgba(220,38,38,0.25)' : 'none'
+                      cursor: 'pointer'
                     }}
                   >
-                    🗑️ Permanently Delete
+                    Delete Permanently
                   </button>
 
                   <button
@@ -2437,17 +2410,16 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                     style={{
                       flex: 1,
                       padding: '8px',
-                      borderRadius: '10px',
+                      borderRadius: '8px',
                       border: 'none',
                       background: deleteMode === 'revoke' ? '#09090B' : 'transparent',
                       color: deleteMode === 'revoke' ? '#FFFFFF' : '#71717A',
-                      fontWeight: 800,
+                      fontWeight: 700,
                       fontSize: '0.74rem',
-                      cursor: 'pointer',
-                      boxShadow: deleteMode === 'revoke' ? '0 2px 6px rgba(0,0,0,0.1)' : 'none'
+                      cursor: 'pointer'
                     }}
                   >
-                    🚫 Revoke / Suspend Only
+                    Revoke Access Only
                   </button>
                 </div>
 
@@ -2700,8 +2672,8 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                   </div>
 
                   {selectedProfileUser.expiresAt && (
-                    <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 800, marginTop: '6px' }}>
-                      ⏳ Expiry: {new Date(selectedProfileUser.expiresAt).toLocaleDateString()} ({formatRemainingTime(selectedProfileUser.expiresAt)?.text || 'Active'})
+                    <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 600, marginTop: '6px' }}>
+                      Expires: {new Date(selectedProfileUser.expiresAt).toLocaleDateString()} ({formatRemainingTime(selectedProfileUser.expiresAt)?.text || 'Active'})
                     </div>
                   )}
                 </div>
@@ -2714,8 +2686,8 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                   </div>
 
                   {selectedProfileUser.gender === 'Woman' ? (
-                    <div style={{ padding: '10px 12px', background: '#FDF2F8', border: '1px solid #FBCFE8', borderRadius: '12px', color: '#DB2777', fontSize: '0.76rem', fontWeight: 800 }}>
-                      ✓ Lifetime VIP Pass for Women (No payment required)
+                    <div style={{ padding: '8px 12px', background: '#F4F4F5', border: '1px solid #E4E4E7', borderRadius: '8px', color: '#52525B', fontSize: '0.75rem', fontWeight: 600 }}>
+                      VIP Pass for Women (Free)
                     </div>
                   ) : (selectedProfileUser.screenshotUrl && !selectedProfileUser.screenshotUrl.includes('unsplash.com')) ? (
                     <div>
@@ -2727,12 +2699,12 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                         style={{
                           width: '100%',
                           height: '160px',
-                          borderRadius: '14px',
+                          borderRadius: '10px',
                           overflow: 'hidden',
                           background: '#09090B',
                           cursor: 'pointer',
                           position: 'relative',
-                          border: '1.5px solid #09090B',
+                          border: '1px solid #E4E4E7',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center'
@@ -2746,16 +2718,16 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                         />
                         <div style={{
                           position: 'absolute', bottom: '8px', right: '8px',
-                          background: 'rgba(9,9,11,0.8)', color: '#FFFFFF',
-                          padding: '4px 8px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 800
+                          background: 'rgba(9,9,11,0.85)', color: '#FFFFFF',
+                          padding: '3px 8px', borderRadius: '6px', fontSize: '0.68rem', fontWeight: 600
                         }}>
-                          Tap to Zoom Fullscreen 🔍
+                          Tap to Zoom
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <div style={{ padding: '10px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '12px', color: '#DC2626', fontSize: '0.76rem', fontWeight: 800 }}>
-                      ⚠️ No payment screenshot was attached by user
+                    <div style={{ padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '8px', color: '#DC2626', fontSize: '0.75rem', fontWeight: 600 }}>
+                      No payment receipt attached
                     </div>
                   )}
                 </div>
@@ -2848,8 +2820,8 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
                 {/* Rejection Note if status is rejected */}
                 {selectedProfileUser.status === 'rejected' && selectedProfileUser.rejectionReason && (
                   <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '14px', padding: '12px', marginBottom: '14px' }}>
-                    <div style={{ fontSize: '0.78rem', fontWeight: 900, color: '#DC2626' }}>
-                      ✕ Rejection Explanation:
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#DC2626' }}>
+                      Rejection Reason:
                     </div>
                     <div style={{ fontSize: '0.76rem', color: '#991B1B', marginTop: '2px' }}>
                       {selectedProfileUser.rejectionReason}

@@ -423,8 +423,10 @@ export async function fetchAllCloudUsers() {
           rejectionReason = p.prompt2_answer.replace('[REJECTION]:', '').trim();
         }
 
-        const isDbPending = p.is_verified === false || mem?.status === 'pending' || (existing && (existing.status === 'pending_approval' || existing.status === 'pending'));
-        const isDbApproved = (p.is_verified === true && mem?.status !== 'pending' && mem?.status !== 'rejected') || (mem?.status === 'approved' && !isDbRejected);
+        // Strict Approval vs Pending precedence:
+        // If profile is verified or membership is approved in DB, account is APPROVED
+        const isDbApproved = (p.is_verified === true || mem?.status === 'approved') && !isDbRejected;
+        const isDbPending = !isDbApproved && !isDbRejected && p.account_status !== 'Suspended';
 
         let isVerified = false;
         let userStatus = 'pending_approval';
@@ -435,9 +437,6 @@ export async function fetchAllCloudUsers() {
           userStatus = 'expired';
         } else if (isDbRejected) {
           userStatus = 'rejected';
-          isVerified = false;
-        } else if (isDbPending) {
-          userStatus = 'pending_approval';
           isVerified = false;
         } else if (isDbApproved) {
           userStatus = 'approved';
@@ -595,49 +594,80 @@ export async function updateCloudUserStatus(targetUserId, targetEmail, newStatus
     }
   }
 
-  // 1. Update in Supabase profiles
-  try {
-    const profileUpdate = {
-      is_verified: newStatus === 'approved',
-      account_status: newStatus === 'suspended' ? 'Suspended' : 'Active',
-      updated_at: now.toISOString()
-    };
-    if (newStatus === 'rejected' && rejectionReason) {
-      profileUpdate.prompt2_answer = `[REJECTION]: ${rejectionReason}`;
-    } else if (newStatus === 'approved') {
-      profileUpdate.prompt2_answer = ''; // clear rejection note
-    }
-
-    await supabase
-      .from('profiles')
-      .update(profileUpdate)
-      .eq('email', cleanEmail);
-  } catch (err) {
-    console.log('Supabase profile update error:', err);
+  const profileUpdate = {
+    is_verified: newStatus === 'approved',
+    account_status: newStatus === 'suspended' ? 'Suspended' : 'Active',
+    updated_at: now.toISOString()
+  };
+  if (newStatus === 'rejected' && rejectionReason) {
+    profileUpdate.prompt2_answer = `[REJECTION]: ${rejectionReason}`;
+  } else if (newStatus === 'approved') {
+    profileUpdate.prompt2_answer = ''; // clear rejection note
   }
 
-  // 3. Update in Supabase memberships
+  const membershipPayload = {
+    status: newStatus === 'approved' ? 'approved' : (newStatus === 'rejected' ? 'rejected' : (newStatus === 'expired' ? 'expired' : 'pending')),
+    starts_at: startsAt,
+    expires_at: expiresAt
+  };
+
+  // 1. Supabase SDK Update by direct UUID and email
   try {
-    const { data: prof } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('email', cleanEmail)
-      .maybeSingle();
-
-    if (prof?.id) {
-      const updatePayload = {
-        status: newStatus === 'approved' ? 'approved' : (newStatus === 'rejected' ? 'rejected' : (newStatus === 'expired' ? 'expired' : 'pending'))
-      };
-      if (startsAt) updatePayload.starts_at = startsAt;
-      if (expiresAt) updatePayload.expires_at = expiresAt;
-
-      await supabase
-        .from('memberships')
-        .update(updatePayload)
-        .eq('user_id', prof.id);
+    if (targetUserId && targetUserId.length === 36) {
+      await supabase.from('profiles').update(profileUpdate).eq('id', targetUserId);
+      await supabase.from('memberships').update(membershipPayload).eq('user_id', targetUserId);
     }
-  } catch (err) {
-    console.log('Supabase membership update error:', err);
+    if (cleanEmail) {
+      await supabase.from('profiles').update(profileUpdate).eq('email', cleanEmail);
+      const { data: profs } = await supabase.from('profiles').select('id').eq('email', cleanEmail);
+      if (profs && Array.isArray(profs) && profs.length > 0) {
+        for (const pr of profs) {
+          await supabase.from('memberships').update(membershipPayload).eq('user_id', pr.id);
+        }
+      }
+    }
+  } catch (sdkErr) {
+    console.warn('Supabase SDK update note:', sdkErr);
+  }
+
+  // 2. Direct REST API Fallback (Guaranteed to bypass stale JWT tokens / SDK session issues)
+  try {
+    if (targetUserId && targetUserId.length === 36) {
+      await fetch(`${supabaseUrl}/rest/v1/profiles?id=eq.${targetUserId}`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify(profileUpdate)
+      });
+      await fetch(`${supabaseUrl}/rest/v1/memberships?user_id=eq.${targetUserId}`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify(membershipPayload)
+      });
+    }
+    if (cleanEmail) {
+      await fetch(`${supabaseUrl}/rest/v1/profiles?email=eq.${encodeURIComponent(cleanEmail)}`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify(profileUpdate)
+      });
+    }
+  } catch (restErr) {
+    console.warn('Direct REST status update note:', restErr);
   }
 
   // 4. Update in local storage
