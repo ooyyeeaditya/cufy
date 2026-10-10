@@ -338,7 +338,8 @@ export default function OnboardingWizard({ initialData, onCompleteOnboarding, on
       paymentProofUrl: (formData.gender === 'Woman' || isFreeLaunchPeriodActive()) ? null : paymentProofUrl,
       voiceNoteUrl: formData.voiceNoteUrl || null,
       voice_note_url: formData.voiceNoteUrl || null,
-      status: (formData.gender === 'Woman' || isFreeLaunchPeriodActive()) ? 'approved' : 'pending_approval',
+      status: 'pending_approval',
+      is_verified: false,
       expiresAt: formData.gender === 'Woman' 
         ? null 
         : isFreeLaunchPeriodActive() 

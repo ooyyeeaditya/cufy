@@ -789,6 +789,15 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
     return pendingVerifications.filter(p => p.gender === 'Woman');
   }, [pendingVerifications]);
 
+  // Auto-switch gender tab if one queue is empty and the other has pending entries
+  useEffect(() => {
+    if (menPendingVerifications.length === 0 && womenPendingVerifications.length > 0 && verifGenderTab === 'men') {
+      setVerifGenderTab('women');
+    } else if (womenPendingVerifications.length === 0 && menPendingVerifications.length > 0 && verifGenderTab === 'women') {
+      setVerifGenderTab('men');
+    }
+  }, [menPendingVerifications.length, womenPendingVerifications.length]);
+
   // 2. ACTIVE USERS (Approved and not expired)
   const activeUsers = useMemo(() => {
     const now = new Date();

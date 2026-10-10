@@ -83,9 +83,8 @@ export default function App() {
         location: cityVal,
         email: userEmail,
         phone: user.phone || '+91 9876543210',
-        status: (isFreeLaunchPeriodActive() && (!user.status || user.status === 'pending_approval'))
-          ? 'approved'
-          : (user.status || (user.gender === 'Woman' ? 'approved' : 'pending_approval')),
+        status: user.status || 'pending_approval',
+        is_verified: user.is_verified || false,
         plan: isFreeLaunchPeriodActive()
           ? (user.gender === 'Woman' ? 'Lifetime VIP Pass' : 'Launch Promo VIP Pass')
           : (user.plan ? formatPlanName(user.plan, user.gender) : (user.gender === 'Woman' ? 'Lifetime VIP Pass' : '1 Month VIP Pass')),
@@ -225,21 +224,17 @@ export default function App() {
               isExpired = true;
             }
 
-            const isVerified = Boolean(dbProf.is_verified || (mem && mem.status === 'approved'));
-
-            const isDbPending = mem?.status === 'pending' || (parsed && (parsed.status === 'pending_approval' || parsed.status === 'pending'));
+            const isVerified = Boolean(dbProf.is_verified && (mem ? mem.status === 'approved' : true));
+            const isDbPending = mem?.status === 'pending' || !dbProf.is_verified || (parsed && (parsed.status === 'pending_approval' || parsed.status === 'pending'));
 
             let updatedStatus = parsed.status;
             if (dbProf.account_status === 'Suspended') updatedStatus = 'suspended';
             else if (isDbRejected) updatedStatus = 'rejected';
             else if (isExpired && !isFreeLaunchPeriodActive()) updatedStatus = 'expired';
-            else if (isFreeLaunchPeriodActive()) {
-              updatedStatus = 'approved';
-            }
             else if (isDbPending) {
               updatedStatus = 'pending_approval';
             }
-            else if (isVerified || (parsed.gender === 'Woman' && parsed.status !== 'pending_approval')) updatedStatus = 'approved';
+            else if (isVerified) updatedStatus = 'approved';
             else updatedStatus = 'pending_approval';
 
             const realDbPhotos = (dbProf.photos && Array.isArray(dbProf.photos) && dbProf.photos.length > 0)
@@ -494,9 +489,9 @@ export default function App() {
         }
 
         // 5. Check if pending approval vs approved
-        const isDbPending = mem?.status === 'pending' || (userProfile && (userProfile.status === 'pending_approval' || userProfile.status === 'pending'));
+        const isDbPending = mem?.status === 'pending' || !dbProf?.is_verified || (userProfile && (userProfile.status === 'pending_approval' || userProfile.status === 'pending'));
 
-        if (isDbPending && !isDbRejected && !isFreeLaunchPeriodActive()) {
+        if (isDbPending && !isDbRejected) {
           if (userProfile.status !== 'pending_approval') {
             const pendingUser = {
               ...userProfile,
@@ -506,7 +501,7 @@ export default function App() {
             setUserProfile(pendingUser);
             localStorage.setItem('cufy_active_user', JSON.stringify(pendingUser));
           }
-        } else if (isFreeLaunchPeriodActive() || (dbProf && (dbProf.is_verified || mem?.status === 'approved' || (userProfile.gender === 'Woman' && userProfile.status !== 'pending_approval')))) {
+        } else if (dbProf && dbProf.is_verified && (mem ? mem.status === 'approved' : true)) {
           if (userProfile.status !== 'approved') {
             const startsAt = mem?.starts_at || now.toISOString();
             const expiresAt = mem?.expires_at || new Date(now.getTime() + 30 * 86400000).toISOString();
@@ -613,12 +608,16 @@ export default function App() {
       prompt1Answer: completedData.prompt1Answer || completedData.promptAnswer || ''
     };
 
-    if (isFreeLaunchPeriodActive() && normalized.status !== 'rejected' && normalized.status !== 'suspended') {
-      normalized.status = 'approved';
+    if (isFreeLaunchPeriodActive()) {
       if (!normalized.plan || normalized.plan.includes('1 Month')) {
         normalized.plan = 'Launch Promo VIP Pass';
       }
       normalized.planPrice = 0;
+    }
+
+    if (!normalized.isAdmin) {
+      normalized.status = 'pending_approval';
+      normalized.is_verified = false;
     }
 
     normalized.isNewRegistration = true;
@@ -912,8 +911,14 @@ export default function App() {
     setViewState('welcome');
   };
 
-  const isPendingApproval = !isFreeLaunchPeriodActive() && Boolean(
-    userProfile && (userProfile.status === 'pending_approval' || userProfile.status === 'pending') && !userProfile.isAdmin
+  const isPendingApproval = Boolean(
+    userProfile && 
+    !userProfile.isAdmin && 
+    (
+      userProfile.status === 'pending_approval' || 
+      userProfile.status === 'pending' || 
+      (!userProfile.is_verified && userProfile.status !== 'approved')
+    )
   );
 
   const isVerificationRejected = userProfile && userProfile.status === 'rejected' && !userProfile.isAdmin;

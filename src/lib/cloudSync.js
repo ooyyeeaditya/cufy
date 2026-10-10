@@ -311,11 +311,11 @@ export async function syncUserToCloud(record) {
 // Fetch all registered users across devices for Admin Panel
 export async function fetchAllCloudUsers() {
   let cloudUsers = [];
+  let profiles = null;
+  let memberships = null;
 
   // Source A: Supabase `profiles` + `memberships` (Primary Source of Truth)
   try {
-    let profiles = null;
-    let memberships = null;
 
     // 1. Try Supabase SDK
     try {
@@ -407,9 +407,6 @@ export async function fetchAllCloudUsers() {
           }
         }
 
-        // STRICT VERIFICATION CHECK:
-        let isVerified = Boolean(p.is_verified || (mem && mem.status === 'approved') || resolvedGender === 'Woman');
-
         // Expiration check
         const now = new Date();
         const startsAt = mem?.starts_at || existing?.startsAt || null;
@@ -426,9 +423,12 @@ export async function fetchAllCloudUsers() {
           rejectionReason = p.prompt2_answer.replace('[REJECTION]:', '').trim();
         }
 
-        const isDbPending = mem?.status === 'pending' || (existing && (existing.status === 'pending_approval' || existing.status === 'pending'));
+        const isDbPending = p.is_verified === false || mem?.status === 'pending' || (existing && (existing.status === 'pending_approval' || existing.status === 'pending'));
+        const isDbApproved = (p.is_verified === true && mem?.status !== 'pending' && mem?.status !== 'rejected') || (mem?.status === 'approved' && !isDbRejected);
 
+        let isVerified = false;
         let userStatus = 'pending_approval';
+
         if (p.account_status === 'Suspended') {
           userStatus = 'suspended';
         } else if (isExpired) {
@@ -439,13 +439,12 @@ export async function fetchAllCloudUsers() {
         } else if (isDbPending) {
           userStatus = 'pending_approval';
           isVerified = false;
-        } else if (resolvedGender === 'Woman') {
+        } else if (isDbApproved) {
           userStatus = 'approved';
           isVerified = true;
-        } else if (isVerified) {
-          userStatus = 'approved';
         } else {
           userStatus = 'pending_approval';
+          isVerified = false;
         }
 
         const rawPlan = mem?.plan_type || existing?.plan || (resolvedGender === 'Woman' ? 'free_women' : '1_month');
