@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Heart, ShieldCheck, CheckCircle2, AlertTriangle, Lock, LogIn, X, ChevronRight, User } from 'lucide-react';
 import { validateEmail } from '../../utils/validation';
-import { ENV } from '../../config/env';
+import { ENV, verifyAdminPassword } from '../../config/env';
 import { supabase } from '../../lib/supabase';
 
 // Helper function to decode JWT from Google Identity Services
@@ -289,15 +289,15 @@ export default function WelcomeHero({ onStartOnboarding, onLoginSuccess, onGoogl
   };
 
   // Password Login Submit Handler (Admin Portal Access via 5-Tap Gesture)
-  const handlePasswordLoginSubmit = (e) => {
+  const handlePasswordLoginSubmit = async (e) => {
     e.preventDefault();
     const trimmedEmail = loginEmail.trim().toLowerCase();
     const cleanPhone = (loginPhone || '').replace(/\D/g, '');
     
     // Admin credentials verification: Phone MUST be 7982026092 (or end with 7982026092)
     const isPhoneValid = cleanPhone === '7982026092' || cleanPhone.endsWith('7982026092');
-    const isEmailValid = trimmedEmail === 'cupid.livepro@gmail.com' || trimmedEmail === 'admin@cufy.app' || trimmedEmail === 'admin';
-    const isPassValid = loginPassword === 'cUpid.livepro#@3210' || loginPassword === 'admin' || loginPassword === ENV.ADMIN_PASS_HASH;
+    const isEmailValid = trimmedEmail === 'cupid.livepro@gmail.com' || trimmedEmail === 'admin@cufy.app';
+    const isPassValid = await verifyAdminPassword(loginPassword.trim());
 
     if (isPassValid && isPhoneValid && isEmailValid) {
       setLoginError('');

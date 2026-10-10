@@ -7,7 +7,8 @@ import {
   Trash2, ShieldAlert, ArrowUpRight, CheckCheck, MessageSquare, AlertTriangle,
   Search, CheckCircle, ExternalLink, UserCheck, Shield
 } from 'lucide-react';
-import { ENV } from '../../config/env';
+import { ENV, verifyAdminPassword } from '../../config/env';
+import { isFreeLaunchPeriodActive, FREE_PROMO_END_DATE } from '../../utils/promoManager';
 import { 
   fetchAllCloudUsers, 
   updateCloudUserStatus, 
@@ -481,10 +482,10 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
     const cleanEmail = email.trim().toLowerCase();
     const cleanPass = password.trim();
 
-    const isMatch = (cleanEmail === 'cupid.livepro@gmail.com' || cleanEmail === 'admin@cufy.app' || cleanEmail === 'admin') &&
-                    (cleanPass === 'cUpid.livepro#@3210' || cleanPass === 'cupid.livepro#@3210' || cleanPass === 'admin' || cleanPass === ENV.ADMIN_PASS_HASH);
+    const isEmailValid = cleanEmail === 'cupid.livepro@gmail.com' || cleanEmail === 'admin@cufy.app';
+    const isPassValid = await verifyAdminPassword(cleanPass);
 
-    if (isMatch) {
+    if (isEmailValid && isPassValid) {
       setIsAuthenticated(true);
       setLoginError('');
       
@@ -506,6 +507,10 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
   };
 
   // FINANCIAL OVERVIEW CALCULATIONS
+  // Business logic:
+  // 1. Until Oct 15: 100% free launch promo active. Users have price = 0.
+  // 2. Paid registrations enter as pending_approval and go into Pipeline (pendingRevenue).
+  // 3. ONLY after Admin approves payment (status === 'approved') does the collected price get added to totalRevenue.
   const financialStats = useMemo(() => {
     let totalRevenue = 0;
     let thisMonthRevenue = 0;
@@ -522,10 +527,35 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
     usersList.forEach(u => {
       const isApproved = u.status === 'approved';
       const isPending = u.status === 'pending_approval' || u.status === 'pending';
-      const isFreeUser = u.gender === 'Woman' || u.planPrice === 0 || (u.plan && (u.plan.includes('Free') || u.plan.includes('Promo')));
-      const price = isFreeUser ? 0 : (u.planPrice || (u.plan?.includes('199') ? 199 : u.plan?.includes('299') ? 299 : u.plan?.includes('499') ? 499 : 799));
+      
+      // Check if registration occurred during promo or is woman / free pass
+      const registeredDuringPromo = (u.createdAt && new Date(u.createdAt) <= FREE_PROMO_END_DATE) || isFreeLaunchPeriodActive();
+      const hasExplicitProof = Boolean(u.paymentProofUrl || u.paymentProof || (u.payments && u.payments.length > 0));
 
-      if (isApproved) {
+      const isFreeUser = u.gender === 'Woman' || 
+                         u.planPrice === 0 || 
+                         (u.plan && (u.plan.includes('Free') || u.plan.includes('Promo') || u.plan.includes('Launch'))) ||
+                         (!hasExplicitProof && registeredDuringPromo);
+
+      let price = 0;
+      if (!isFreeUser) {
+        if (typeof u.planPrice === 'number' && u.planPrice > 0) {
+          price = u.planPrice;
+        } else if (u.plan?.includes('199')) {
+          price = 199;
+        } else if (u.plan?.includes('299')) {
+          price = 299;
+        } else if (u.plan?.includes('499')) {
+          price = 499;
+        } else if (u.plan?.includes('799') || u.plan?.includes('VIP') || u.plan?.includes('Monthly')) {
+          price = 799;
+        } else if (u.amount && typeof u.amount === 'string' && Number(u.amount.replace(/\D/g, ''))) {
+          price = Number(u.amount.replace(/\D/g, ''));
+        }
+      }
+
+      // STRICT RULE: ONLY increment total collected rupees when payment is approved by admin
+      if (isApproved && price > 0) {
         activeApprovedCount++;
         totalRevenue += price;
 
@@ -535,9 +565,12 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
         } else if (!regDate) {
           thisMonthRevenue += price;
         }
+      } else if (isApproved) {
+        activeApprovedCount++;
       }
 
-      if (isPending && u.gender !== 'Woman') {
+      // Unapproved / pending payments sit in Pipeline, NEVER in total revenue
+      if (isPending && price > 0) {
         pendingCount++;
         pendingRevenue += price;
       }

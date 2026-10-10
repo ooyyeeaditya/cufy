@@ -1,7 +1,5 @@
 import { supabase } from './supabase';
 
-const REST_CLOUD_API = 'https://api.restful-api.dev/objects';
-
 // Helper: Get plan duration in days
 export function getPlanDurationDays(plan, gender) {
   if (gender === 'Woman') return 99999;
@@ -165,21 +163,7 @@ export async function syncUserToCloud(record) {
     } catch (e) {}
   }
 
-  // 3. Multi-Device Cloud DB Relay
-  try {
-    await fetch(REST_CLOUD_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: `cufy_user_${userEmail}`,
-        data: syncPayload
-      })
-    });
-  } catch (cloudErr) {
-    console.log('Cloud relay note:', cloudErr);
-  }
-
-  // 4. Supabase Database Sync
+  // 3. Supabase Database Sync
   try {
     let authUserId = null;
     try {
@@ -576,37 +560,7 @@ export async function updateCloudUserStatus(targetUserId, targetEmail, newStatus
     }
   }
 
-  // 1. Update in Cloud DB Relay
-  try {
-    const res = await fetch(REST_CLOUD_API);
-    if (res.ok) {
-      const list = await res.json();
-      if (Array.isArray(list)) {
-        const matched = list.find(item => item.name === `cufy_user_${cleanEmail}` || (item.data && item.data.email && item.data.email.toLowerCase() === cleanEmail));
-        if (matched) {
-          matched.data.status = newStatus;
-          matched.data.is_verified = newStatus === 'approved';
-          matched.data.startsAt = startsAt;
-          matched.data.expiresAt = expiresAt;
-          matched.data.planDays = durationDays;
-          if (newStatus === 'rejected') {
-            matched.data.rejectionReason = rejectionReason;
-          } else if (newStatus === 'approved') {
-            matched.data.rejectionReason = '';
-          }
-          await fetch(`${REST_CLOUD_API}/${matched.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(matched)
-          });
-        }
-      }
-    }
-  } catch (e) {
-    console.log('Cloud status update note:', e);
-  }
-
-  // 2. Update in Supabase profiles
+  // 1. Update in Supabase profiles
   try {
     const profileUpdate = {
       is_verified: newStatus === 'approved',
