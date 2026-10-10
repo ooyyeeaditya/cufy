@@ -444,6 +444,9 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
+    try {
+      localStorage.removeItem('cufy_deleted_users');
+    } catch (e) {}
     await loadUsers();
     setTimeout(() => setIsRefreshing(false), 500);
   };
@@ -455,6 +458,9 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
       return;
     }
 
+    try {
+      localStorage.removeItem('cufy_deleted_users');
+    } catch (e) {}
     loadUsers();
     const pollInterval = setInterval(loadUsers, 3000); // 3s Real-Time Polling Loop
 
@@ -489,6 +495,10 @@ export default function AdminPanel({ isOpen, onClose, userProfile, onLoginSucces
       setIsAuthenticated(true);
       setLoginError('');
       
+      try {
+        localStorage.removeItem('cufy_deleted_users');
+      } catch (e) {}
+
       // Request native notification permission on admin login
       if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission().catch(() => {});

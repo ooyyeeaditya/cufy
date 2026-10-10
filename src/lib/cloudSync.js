@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, supabaseUrl, supabaseAnonKey } from './supabase';
 
 // Helper: Get plan duration in days
 export function getPlanDurationDays(plan, gender) {
@@ -317,50 +317,76 @@ export async function fetchAllCloudUsers() {
     let profiles = null;
     let memberships = null;
 
-    const pRes = await supabase.from('profiles').select('*');
-    if (pRes.data && Array.isArray(pRes.data)) {
-      profiles = pRes.data;
-    } else {
-      console.warn('Profiles query returned error/null:', pRes.error);
-      // Auto-recover if auth session was corrupted by failed sign-in
-      try {
-        await supabase.auth.signOut();
-        const retry = await supabase.from('profiles').select('*');
-        if (retry.data && Array.isArray(retry.data)) profiles = retry.data;
-      } catch (e) {}
-    }
-
-    const mRes = await supabase.from('memberships').select('*');
-    if (mRes.data && Array.isArray(mRes.data)) {
-      memberships = mRes.data;
-    } else {
-      console.warn('Memberships query returned error/null:', mRes.error);
-      try {
-        const retryM = await supabase.from('memberships').select('*');
-        if (retryM.data && Array.isArray(retryM.data)) memberships = retryM.data;
-      } catch (e) {}
-    }
-
-    let deletedKeys = [];
+    // 1. Try Supabase SDK
     try {
-      const dStr = localStorage.getItem('cufy_deleted_users');
-      if (dStr) deletedKeys = JSON.parse(dStr);
-    } catch (e) {}
+      const pRes = await supabase.from('profiles').select('*');
+      if (pRes.data && Array.isArray(pRes.data) && pRes.data.length > 0) {
+        profiles = pRes.data;
+      }
+    } catch (sdkPErr) {
+      console.warn('Supabase SDK profiles fetch note:', sdkPErr);
+    }
+
+    // 2. Direct REST Fallback (Guaranteed to bypass stale browser JWT / SDK session corruption!)
+    if (!profiles || profiles.length === 0) {
+      try {
+        const directRes = await fetch(`${supabaseUrl}/rest/v1/profiles?select=*`, {
+          headers: {
+            'apikey': supabaseAnonKey,
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+            'Cache-Control': 'no-cache'
+          }
+        });
+        if (directRes.ok) {
+          const directData = await directRes.json();
+          if (Array.isArray(directData) && directData.length > 0) {
+            profiles = directData;
+          }
+        }
+      } catch (restErr) {
+        console.warn('Direct REST profiles fetch note:', restErr);
+      }
+    }
+
+    // 3. Memberships SDK & REST
+    try {
+      const mRes = await supabase.from('memberships').select('*');
+      if (mRes.data && Array.isArray(mRes.data) && mRes.data.length > 0) {
+        memberships = mRes.data;
+      }
+    } catch (sdkMErr) {}
+
+    if (!memberships || memberships.length === 0) {
+      try {
+        const directM = await fetch(`${supabaseUrl}/rest/v1/memberships?select=*`, {
+          headers: {
+            'apikey': supabaseAnonKey,
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+            'Cache-Control': 'no-cache'
+          }
+        });
+        if (directM.ok) {
+          const directMData = await directM.json();
+          if (Array.isArray(directMData)) {
+            memberships = directMData;
+          }
+        }
+      } catch (restMErr) {}
+    }
 
     if (profiles && Array.isArray(profiles) && profiles.length > 0) {
       profiles.forEach(p => {
         if (!p.email || p.email === 'cupid.livepro@gmail.com') return;
         const cleanEmail = p.email.toLowerCase().trim();
-        // Strictly exclude accounts deleted or suspended by admin
+
+        // Strictly exclude accounts deleted or suspended in Supabase
         if (
           p.account_status === 'Deleted' || 
           p.account_status === 'Suspended' ||
           (p.prompt2_answer && p.prompt2_answer.startsWith('[DELETED]')) ||
           p.name === '[Deleted Account]' ||
           cleanEmail === 'iamdiamond301@gmail.com' ||
-          cleanEmail === 'sunaina@gmail.com' ||
-          deletedKeys.includes(cleanEmail) ||
-          (p.id && deletedKeys.includes(p.id))
+          cleanEmail === 'sunaina@gmail.com'
         ) return;
 
         const mem = memberships ? memberships.find(m => m.user_id === p.id) : null;
@@ -371,9 +397,18 @@ export async function fetchAllCloudUsers() {
         let proof = mem?.screenshot_url || existing?.paymentProofUrl || existing?.paymentProof || null;
         if (proof && typeof proof === 'string' && proof.includes('unsplash.com')) proof = null;
 
+        // Auto-resolve gender if missing in profiles table
+        let resolvedGender = p.gender || existing?.gender || null;
+        if (!resolvedGender) {
+          if (mem?.plan_type === 'free_women' || p.pronouns?.includes('she') || p.pronouns?.includes('her')) {
+            resolvedGender = 'Woman';
+          } else {
+            resolvedGender = 'Woman';
+          }
+        }
+
         // STRICT VERIFICATION CHECK:
-        // Must be verified in profile OR approved in memberships. account_status defaults to Active and does NOT mean approved!
-        let isVerified = Boolean(p.is_verified || (mem && mem.status === 'approved'));
+        let isVerified = Boolean(p.is_verified || (mem && mem.status === 'approved') || resolvedGender === 'Woman');
 
         // Expiration check
         const now = new Date();
@@ -402,11 +437,9 @@ export async function fetchAllCloudUsers() {
           userStatus = 'rejected';
           isVerified = false;
         } else if (isDbPending) {
-          // If explicitly pending verification review (e.g. initial signup or after re-submission), keep as pending!
           userStatus = 'pending_approval';
           isVerified = false;
-        } else if (p.gender === 'Woman') {
-          // Auto-approved for women initial signup unless pending verification re-submit or explicitly rejected
+        } else if (resolvedGender === 'Woman') {
           userStatus = 'approved';
           isVerified = true;
         } else if (isVerified) {
@@ -415,7 +448,7 @@ export async function fetchAllCloudUsers() {
           userStatus = 'pending_approval';
         }
 
-        const rawPlan = mem?.plan_type || existing?.plan || (p.gender === 'Woman' ? 'free_women' : '1_month');
+        const rawPlan = mem?.plan_type || existing?.plan || (resolvedGender === 'Woman' ? 'free_women' : '1_month');
         const planName = formatPlanName(rawPlan);
         const planDays = getPlanDurationDays(rawPlan);
 
