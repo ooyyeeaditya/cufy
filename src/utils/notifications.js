@@ -81,8 +81,8 @@ export async function sendNativeNotification(title, body, options = {}) {
 
   const notifOptions = {
     body,
-    icon: '/photos/cufylogo.jpg',
-    badge: '/photos/cufylogo.jpg',
+    icon: '/photos/cufylogo.jpg?v=2',
+    badge: '/photos/cufylogo.jpg?v=2',
     vibrate: [200, 100, 200, 100, 200],
     tag: options.tag || 'cufy-alert',
     renotify: true,

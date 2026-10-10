@@ -53,9 +53,9 @@ export default function BottomNav({ activeTab, onChangeTab, isShiftedDown = fals
         }}
       >
         <img 
-          src="/photos/cupidlogo.jpg" 
+          src="/photos/cufylogo.jpg?v=2" 
           onError={(e) => { e.target.src = '/photos/cufylogo.jpg'; }}
-          alt="Cupid logo" 
+          alt="Cufy logo" 
           style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} 
         />
       </button>
